@@ -1,9 +1,8 @@
+
 target_sources(${PROJECT_NAME}
   INTERFACE
   FILE_SET ${PROJECT_NAME}_HEADERS
   TYPE HEADERS
     FILES
-    sort.hpp
+    insertion_sort.hpp
   )
-
-add_subdirectory(sort)
