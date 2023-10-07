@@ -1,0 +1,23 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "algorithms",
+  "version": "0.0.1",
+  "description": "Algorithms for c++",
+  "dependencies": [
+    "fmt"
+  ],
+  "features" : {
+    "tests" : {
+      "description" : "Build the tests for algorithms.",
+      "dependencies" : [
+        "gtest"
+      ]
+    },
+    "benchmarks" : {
+      "description" : "Build the benchmarks for algorithms.",
+      "dependencies" : [
+        "benchmark"
+      ]
+    }
+  }
+}

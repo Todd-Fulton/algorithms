@@ -1,0 +1,24 @@
+﻿---
+BasedOnStyle: Microsoft
+ColumnLimit: 75
+AlignAfterOpenBracket: Align
+AlwaysBreakTemplateDeclarations: 'Yes'
+BinPackArguments: false
+BinPackParameters: false
+AllowShortBlocksOnASingleLine: 'Empty'
+AccessModifierOffset: -4
+PointerAlignment: 'Left'
+ReferenceAlignment: 'Pointer'
+BreakConstructorInitializers: 'BeforeComma'
+RequiresClausePosition: 'OwnLine'
+IndentRequiresClause: false
+BreakBeforeBraces: Custom
+BraceWrapping:
+    AfterStruct: true
+    AfterClass: true
+    AfterUnion: true
+    AfterFunction: true
+    AfterControlStatement: 'Never'
+    SplitEmptyRecord: false
+BreakBeforeConceptDeclarations: 'Always'
+...

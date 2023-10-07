@@ -1,0 +1,81 @@
+Completion:
+    AllScopes: true
+Index:
+    Background: Build
+    StandardLibrary: Yes
+InlayHints:
+    Designators: True
+    Enabled: True
+    ParameterNames: True
+    DeducedTypes: True
+Hover:
+    ShowAKA: True
+---
+If:
+    PathMatch: .*\.hpp
+CompileFlags:
+    Add: [-isystem/home/todd/source/lynx/lynx/include,
+          -isystem/home/todd/source/lynx/meta/include,
+          -isystem/home/todd/source/lynx/build/lynx/include,
+          -isystem/home/todd/source/lynx/build/vcpkg_installed/x64-linux/include,
+          -std=c++2c,
+          -Wall,
+          -Wextra,
+          -Wshadow,
+          -Wnon-virtual-dtor,
+          -Wold-style-cast,
+          -Wcast-align,
+          -Wunused,
+          -Woverloaded-virtual,
+          -Wpedantic,
+          -Wconversion,
+          -Wsign-conversion,
+          -Wnull-dereference,
+          -Wdouble-promotion,
+          -Wformat=2,
+          -Wimplicit-fallthrough]
+    Remove: -I*
+Diagnostics:
+    ClangTidy:
+        Add: [
+            modernize-*,
+            readability-*,
+            cppcoreguidelines-*,
+            hicupp-*,
+            performance-*,
+            bugprone-*
+        ]
+        Remove: [
+            abseil-*,
+            altera-*,
+            android-*,
+            fuchsia-*,
+            google-*,
+            llvm*,
+            modernize-use-trailing-return-type,
+            zircon-*,
+            readability-else-after-return,
+            readability-static-accessed-through-instance,
+            readability-avoid-const-params-in-decls,
+            cppcoreguidelines-non-private-member-variables-in-classes,
+            misc-non-private-member-variables-in-classes,
+            cppcoreguidelines-avoid-magic-numbers,
+            readability-magic-numbers,
+            cppcoreguidelines-rvalue-reference-param-not-moved,
+            hicpp-uppercase-literal-suffix,
+            readability-uppercase-literal-suffix,
+            readability-avoid-unconditional-preprocessor-if,
+            hicpp-noexcept-move,
+            performance-noexcept-move-constructor,
+            cppcoreguidelines-macro-usage,
+            bugprone-macro-parentheses,
+            misc-include-cleaner,
+            bugprone-easily-swappable-parameters,
+            cert-dcl58-cpp,
+            bugprone-branch-clone,
+            cppcoreguidelines-init-variables,
+            cppcoreguidelines-special-member-functions,
+            hicpp-special-member-functions,
+            '*-noexcept-*',
+            '*-std-forward'
+        ]
