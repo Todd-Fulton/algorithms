@@ -4,6 +4,8 @@ target_sources(${PROJECT_NAME}
   TYPE HEADERS
     FILES
     sort.hpp
+    search.hpp
   )
 
 add_subdirectory(sort)
+add_subdirectory(search)

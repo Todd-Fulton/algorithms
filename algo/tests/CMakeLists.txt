@@ -4,8 +4,12 @@ find_package(GTest CONFIG REQUIRED)
 
 include(GoogleTest)
 
-add_executable(sort_tests sort_tests.cpp)
-target_link_libraries(sort_tests PRIVATE algorithms GTest::gtest GTest::gtest_main)
+macro(algo_add_tests name)
+  add_executable(${name} ${name}.cpp gtests_main.cpp)
+  target_link_libraries(${name} PRIVATE algorithms GTest::gtest)
 
-gtest_discover_tests(sort_tests)
+  gtest_discover_tests(${name})
+endmacro()
 
+algo_add_tests(sort_tests)
+algo_add_tests(search_tests)
