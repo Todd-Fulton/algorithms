@@ -22,7 +22,7 @@ target_link_libraries(${PROJECT_NAME}
   fmt::fmt
 )
 
-target_include_directories(algorithms
+target_include_directories(${PROJECT_NAME}
   INTERFACE
   $<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/include>
   $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/include>
