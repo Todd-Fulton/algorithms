@@ -121,3 +121,63 @@ TEST(Sorting, MergeSort_Descending_Vector)
     EXPECT_EQ(given, expected);
 }
 
+TEST(Sorting, BubbleSort_Ascending_Vector)
+{
+    const vector expected{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    vector<int> given{expected};
+
+    mt19937 gen{seed}; // NOLINT
+
+    shuffle(given, gen);
+
+    algo::bubble_sort(given);
+
+    EXPECT_EQ(given, expected);
+}
+
+TEST(Sorting, BubbleSort_Ascending_List)
+{
+    const list expected{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    vector<int> shuffled{expected.begin(), expected.end()};
+
+    mt19937 gen{seed}; // NOLINT
+
+    shuffle(shuffled, gen);
+
+    list<int> given{shuffled.begin(), shuffled.end()};
+
+    algo::bubble_sort(given);
+
+    EXPECT_EQ(given, expected);
+}
+
+TEST(Sorting, BubbleSort_Descending_Vector)
+{
+    const vector expected{9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
+    vector<int> given{expected};
+
+    mt19937 gen{seed}; // NOLINT
+
+    shuffle(given, gen);
+
+    algo::bubble_sort(given, std::less<>{});
+
+    EXPECT_EQ(given, expected);
+}
+
+TEST(Sorting, BubbleSort_Descending_List)
+{
+    const list expected{9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
+    vector<int> shuffled{expected.begin(), expected.end()};
+
+    mt19937 gen{seed}; // NOLINT
+
+    shuffle(shuffled, gen);
+
+    list<int> given{shuffled.begin(), shuffled.end()};
+
+    algo::bubble_sort(given, std::less<>{});
+
+    EXPECT_EQ(given, expected);
+}
+
