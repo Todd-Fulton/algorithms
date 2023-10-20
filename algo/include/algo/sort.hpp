@@ -21,3 +21,5 @@
 #include "sort/insertion_sort.hpp"
 #include "sort/merge_sort.hpp"
 #include "sort/bubble_sort.hpp"
+#include "sort/heap_sort.hpp"
+
