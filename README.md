@@ -9,7 +9,7 @@ This project also functions as a sandbox to study and practice the management of
 
 Clone the repository, create and cd into the build directory:
 ```
-git clone https://Todd-Fulton/algorithms.git
+git clone https://github.com/Todd-Fulton/algorithms.git
 mkdir algorithms/build
 cd algorithms/build
 ```
