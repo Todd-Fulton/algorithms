@@ -210,8 +210,7 @@ TEST(Sorting, HeapSort_Descending_Vector)
     EXPECT_EQ(given, expected);
 }
 
-TEST(Sorting, QuickSort_Ascending_Vector)
-{
+TEST(Sorting, QuickSort_Ascending_Vector) {
     const vector expected{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
     vector<int> given{expected};
 
@@ -235,6 +234,34 @@ TEST(Sorting, QuickSort_Descending_Vector)
     shuffle(given, gen);
 
     algo::quick_sort(given, greater<>{});
+
+    EXPECT_EQ(given, expected);
+}
+
+TEST(Sorting, ShellSort_Ascending_Vector) {
+    const vector expected{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    vector<int> given{expected};
+
+    mt19937 gen{seed}; // NOLINT
+
+    shuffle(given, gen);
+
+    algo::shell_sort(given);
+
+    EXPECT_EQ(given, expected);
+}
+
+
+TEST(Sorting, ShellSort_Descending_Vector)
+{
+    const vector expected{9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
+    vector<int> given{expected};
+
+    mt19937 gen{seed}; // NOLINT
+
+    shuffle(given, gen);
+
+    algo::shell_sort(given, greater<>{});
 
     EXPECT_EQ(given, expected);
 }

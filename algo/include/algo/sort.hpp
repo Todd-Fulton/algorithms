@@ -23,4 +23,4 @@
 #include "sort/bubble_sort.hpp"
 #include "sort/heap_sort.hpp"
 #include "sort/quick_sort.hpp"
-
+#include "sort/shell_sort.hpp"
