@@ -24,3 +24,4 @@
 #include "sort/heap_sort.hpp"
 #include "sort/quick_sort.hpp"
 #include "sort/shell_sort.hpp"
+#include "sort/selection_sort.hpp"

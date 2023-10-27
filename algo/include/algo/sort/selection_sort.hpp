@@ -16,3 +16,38 @@
  **/
 
 
+#pragma once
+
+
+#include <ranges>
+namespace algo {
+
+template <std::ranges::forward_range RNG, class CMP = std::less<>>
+void selection_sort(RNG& rng, CMP const& cmp = CMP{})
+{
+    auto i_itr = std::begin(rng);
+    auto j_itr = std::begin(rng);
+    auto count = std::size(rng) - 1;
+
+    for (auto i = 0UL; i < count; std::advance(i_itr, 1), ++i)
+    {
+
+        auto sel = i_itr;
+        j_itr = i_itr;
+        ++j_itr;
+
+        for (; j_itr != std::end(rng); std::advance(j_itr, 1))
+        {
+            if(cmp(*j_itr, *sel)) {
+                sel = j_itr;
+            }
+        }
+
+        if (sel != i_itr)
+        {
+            using std::swap;
+            swap(*i_itr, *sel);
+        }
+    }
+}
+}
