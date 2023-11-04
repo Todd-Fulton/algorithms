@@ -31,10 +31,13 @@ using std::vector;
 using std::ranges::shuffle;
 
 extern unsigned long long seed; // NOLINT
+extern unsigned long long range_size; // NOLINT
+
 
 TEST(Sorting, InsertSort_Ascending_Vector)
 {
-    const vector expected{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
     vector<int> given{expected};
 
     mt19937 gen{seed}; // NOLINT
@@ -48,7 +51,8 @@ TEST(Sorting, InsertSort_Ascending_Vector)
 
 TEST(Sorting, InsertSort_Ascending_List)
 {
-    const list expected{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    list<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
     vector<int> shuffled{expected.begin(), expected.end()};
 
     mt19937 gen{seed}; // NOLINT
@@ -64,7 +68,9 @@ TEST(Sorting, InsertSort_Ascending_List)
 
 TEST(Sorting, InsertSort_Descending_Vector)
 {
-    const vector expected{9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
+    std::ranges::reverse(expected);
     vector<int> given{expected};
 
     mt19937 gen{seed}; // NOLINT
@@ -94,7 +100,8 @@ TEST(Sorting, InsertSort_Descending_List)
 
 TEST(Sorting, MergeSort_Ascending_Vector)
 {
-    const vector expected{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
     vector<int> given{expected};
 
     mt19937 gen{seed}; // NOLINT
@@ -109,7 +116,9 @@ TEST(Sorting, MergeSort_Ascending_Vector)
 
 TEST(Sorting, MergeSort_Descending_Vector)
 {
-    const vector expected{9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
+    std::ranges::reverse(expected);
     vector<int> given{expected};
 
     mt19937 gen{seed}; // NOLINT
@@ -123,7 +132,8 @@ TEST(Sorting, MergeSort_Descending_Vector)
 
 TEST(Sorting, BubbleSort_Ascending_Vector)
 {
-    const vector expected{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
     vector<int> given{expected};
 
     mt19937 gen{seed}; // NOLINT
@@ -153,7 +163,9 @@ TEST(Sorting, BubbleSort_Ascending_List)
 
 TEST(Sorting, BubbleSort_Descending_Vector)
 {
-    const vector expected{9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
+    std::ranges::reverse(expected);
     vector<int> given{expected};
 
     mt19937 gen{seed}; // NOLINT
@@ -183,7 +195,8 @@ TEST(Sorting, BubbleSort_Descending_List)
 
 TEST(Sorting, HeapSort_Ascending_Vector)
 {
-    const vector expected{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
     vector<int> given{expected};
 
     mt19937 gen{seed}; // NOLINT
@@ -198,7 +211,9 @@ TEST(Sorting, HeapSort_Ascending_Vector)
 
 TEST(Sorting, HeapSort_Descending_Vector)
 {
-    const vector expected{9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
+    std::ranges::reverse(expected);
     vector<int> given{expected};
 
     mt19937 gen{seed}; // NOLINT
@@ -211,7 +226,8 @@ TEST(Sorting, HeapSort_Descending_Vector)
 }
 
 TEST(Sorting, QuickSort_Ascending_Vector) {
-    const vector expected{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
     vector<int> given{expected};
 
     mt19937 gen{seed}; // NOLINT
@@ -226,7 +242,9 @@ TEST(Sorting, QuickSort_Ascending_Vector) {
 
 TEST(Sorting, QuickSort_Descending_Vector)
 {
-    const vector expected{9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
+    std::ranges::reverse(expected);
     vector<int> given{expected};
 
     mt19937 gen{seed}; // NOLINT
@@ -239,7 +257,8 @@ TEST(Sorting, QuickSort_Descending_Vector)
 }
 
 TEST(Sorting, ShellSort_Ascending_Vector) {
-    const vector expected{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
     vector<int> given{expected};
 
     mt19937 gen{seed}; // NOLINT
@@ -254,7 +273,9 @@ TEST(Sorting, ShellSort_Ascending_Vector) {
 
 TEST(Sorting, ShellSort_Descending_Vector)
 {
-    const vector expected{9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
+    std::ranges::reverse(expected);
     vector<int> given{expected};
 
     mt19937 gen{seed}; // NOLINT
@@ -268,7 +289,8 @@ TEST(Sorting, ShellSort_Descending_Vector)
 
 TEST(Sorting, SelectionSort_Ascending_Vector)
 {
-    const vector expected{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
     vector<int> given{expected};
 
     mt19937 gen{seed}; // NOLINT
@@ -298,7 +320,9 @@ TEST(Sorting, SelectionSort_Ascending_List)
 
 TEST(Sorting, SelectionSort_Descending_Vector)
 {
-    const vector expected{9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
+    std::ranges::reverse(expected);
     vector<int> given{expected};
 
     mt19937 gen{seed}; // NOLINT
@@ -322,6 +346,38 @@ TEST(Sorting, SelectionSort_Descending_List)
     list<int> given{shuffled.begin(), shuffled.end()};
 
     algo::selection_sort(given, greater<>{});
+
+    EXPECT_EQ(given, expected);
+}
+
+
+TEST(Sorting, TimSort_Ascending_Vector) {
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
+    vector<int> given{expected};
+
+    mt19937 gen{seed}; // NOLINT
+
+    shuffle(given, gen);
+
+    algo::tim_sort(given);
+
+    EXPECT_EQ(given, expected);
+}
+
+
+TEST(Sorting, TimSort_Descending_Vector)
+{
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
+    std::ranges::reverse(expected);
+    vector<int> given{expected};
+
+    mt19937 gen{seed}; // NOLINT
+
+    shuffle(given, gen);
+
+    algo::tim_sort(given, greater<>{});
 
     EXPECT_EQ(given, expected);
 }

@@ -25,3 +25,4 @@
 #include "sort/quick_sort.hpp"
 #include "sort/shell_sort.hpp"
 #include "sort/selection_sort.hpp"
+#include "sort/tim_sort.hpp"

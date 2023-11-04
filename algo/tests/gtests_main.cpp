@@ -21,23 +21,31 @@
 #include <random>
 
 constinit unsigned long long seed = 0; // NOLINT
+constinit unsigned long long range_size = 0; // NOLINT
 
 int main(int argc, char** argv)
 {
     testing::InitGoogleTest(&argc, argv);
 
     static constexpr std::string_view shuffle_seed_arg = "--seed=";
+    static constexpr std::string_view range_size_arg = "--range-size=";
 
     for (int i = 0; i < argc; i++) {
         std::string_view arg{argv[i]}; // NOLINT
         if (arg.starts_with(shuffle_seed_arg)) {
             seed = std::stoull(arg.begin() + shuffle_seed_arg.length());
         }
+        else if (arg.starts_with(range_size_arg)) {
+            range_size = std::stoull(arg.begin() + range_size_arg.length());
+        }
     }
+    std::random_device rand{};
     if (seed == 0) {
         // initialize seed
-        std::random_device rand{};
         seed = rand();
+    }
+    if (range_size == 0) {
+        range_size = 20 + (rand() % 200);
     }
 
     std::cout << "Shuffle Seed: " << seed << "\n";
