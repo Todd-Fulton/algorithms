@@ -14,12 +14,16 @@ set_target_properties(
 set(${PROJECT_NAME}_LIBFMT_VERSION_NEEDED 1.0.1)
 
 find_package(fmt ${${PROJECT_NAME}_LIBFMT_VERSION_NEEDED} CONFIG REQUIRED)
+find_package(range-v3 CONFIG REQUIRED)
 
 target_link_libraries(${PROJECT_NAME}
   INTERFACE
   algorithms_options
   algorithms_warnings
   fmt::fmt
+  range-v3::meta
+  range-v3::concepts
+  range-v3::range-v3
 )
 
 target_include_directories(${PROJECT_NAME}

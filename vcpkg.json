@@ -4,7 +4,8 @@
   "version": "0.0.1",
   "description": "Algorithms for c++",
   "dependencies": [
-    "fmt"
+    "fmt",
+    "range-v3"
   ],
   "features" : {
     "tests" : {
