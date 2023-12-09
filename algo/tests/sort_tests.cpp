@@ -413,3 +413,34 @@ TEST(Sorting, TreeSort_Descending_Vector)
     EXPECT_EQ(given, expected);
 }
 
+TEST(Sorting, BlockSort_Ascending_Vector) {
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
+    vector<int> given{expected};
+
+    mt19937 gen{seed}; // NOLINT
+
+    shuffle(given, gen);
+
+    algo::block_sort(given);
+
+    EXPECT_EQ(given, expected);
+}
+
+
+TEST(Sorting, BlockSort_Descending_Vector)
+{
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
+    std::ranges::reverse(expected);
+    vector<int> given{expected};
+
+    mt19937 gen{seed}; // NOLINT
+
+    shuffle(given, gen);
+
+    algo::block_sort(given, greater<>{});
+
+    EXPECT_EQ(given, expected);
+}
+

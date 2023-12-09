@@ -2,21 +2,23 @@
  * Copyright (C) 2023  Todd W. Fulton
  *
  *  This program is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU Lesser General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU Lesser General Public License as
+ *published by the Free Software Foundation, either version 3 of the
+ *License, or (at your option) any later version.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU Lesser General Public License for more details.
  *
- *  You should have received a copy of the GNU Lesser General Public License
- *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *  You should have received a copy of the GNU Lesser General Public
+ *License along with this program.  If not, see
+ *<https://www.gnu.org/licenses/>.
  **/
 
 #pragma once
 
+#include <range/v3/algorithm/for_each.hpp>
 #include <ranges>
 #include <vector>
 
@@ -86,7 +88,10 @@ void merge_sort(RNG& rng, CMP cmp = CMP{})
             merge(src, dbegin_left, dend_left, dbegin_right, dend_right);
         };
 
-    std::vector<std::ranges::range_value_t<RNG>> dst{rng};
+    std::vector<std::ranges::range_value_t<RNG>> dst;
+    dst.reserve(size);
+    ranges::for_each(rng,
+                     [&](auto& x) { dst.emplace_back(std::move(x)); });
     auto src_itr = std::begin(rng);
     auto dst_itr = std::begin(dst);
 
@@ -94,7 +99,8 @@ void merge_sort(RNG& rng, CMP cmp = CMP{})
     // on the location in memory of the start dst. If the address of the
     // begining of dst memory storage is X, then X + size(rng) should be
     // less than or equal to the maximum addressible limit of the system.
-    top_down_split_merge(top_down_split_merge,
+    top_down_split_merge(
+        top_down_split_merge,
         src_itr,
         dst_itr,
         static_cast<std::ranges::range_difference_t<RNG>>(size));
