@@ -2,17 +2,18 @@
  * Copyright (C) 2023  Todd W. Fulton
  *
  *  This program is free software: you can redistribute it and/or modify
- *  it under the terms of the GNU Lesser General Public License as published by
- *  the Free Software Foundation, either version 3 of the License, or
- *  (at your option) any later version.
+ *  it under the terms of the GNU Lesser General Public License as
+ *published by the Free Software Foundation, either version 3 of the
+ *License, or (at your option) any later version.
  *
  *  This program is distributed in the hope that it will be useful,
  *  but WITHOUT ANY WARRANTY; without even the implied warranty of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  *  GNU Lesser General Public License for more details.
  *
- *  You should have received a copy of the GNU Lesser General Public License
- *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ *  You should have received a copy of the GNU Lesser General Public
+ *License along with this program.  If not, see
+ *<https://www.gnu.org/licenses/>.
  **/
 
 #include <gtest/gtest.h>
@@ -30,9 +31,8 @@ using std::mt19937;
 using std::vector;
 using std::ranges::shuffle;
 
-extern unsigned long long seed; // NOLINT
+extern unsigned long long seed;       // NOLINT
 extern unsigned long long range_size; // NOLINT
-
 
 TEST(Sorting, InsertSort_Ascending_Vector)
 {
@@ -112,7 +112,6 @@ TEST(Sorting, MergeSort_Ascending_Vector)
 
     EXPECT_EQ(given, expected);
 }
-
 
 TEST(Sorting, MergeSort_Descending_Vector)
 {
@@ -208,7 +207,6 @@ TEST(Sorting, HeapSort_Ascending_Vector)
     EXPECT_EQ(given, expected);
 }
 
-
 TEST(Sorting, HeapSort_Descending_Vector)
 {
     vector<int> expected(range_size);
@@ -225,7 +223,8 @@ TEST(Sorting, HeapSort_Descending_Vector)
     EXPECT_EQ(given, expected);
 }
 
-TEST(Sorting, QuickSort_Ascending_Vector) {
+TEST(Sorting, QuickSort_Ascending_Vector)
+{
     vector<int> expected(range_size);
     std::iota(std::begin(expected), std::end(expected), 0);
     vector<int> given{expected};
@@ -238,7 +237,6 @@ TEST(Sorting, QuickSort_Ascending_Vector) {
 
     EXPECT_EQ(given, expected);
 }
-
 
 TEST(Sorting, QuickSort_Descending_Vector)
 {
@@ -256,7 +254,8 @@ TEST(Sorting, QuickSort_Descending_Vector)
     EXPECT_EQ(given, expected);
 }
 
-TEST(Sorting, ShellSort_Ascending_Vector) {
+TEST(Sorting, ShellSort_Ascending_Vector)
+{
     vector<int> expected(range_size);
     std::iota(std::begin(expected), std::end(expected), 0);
     vector<int> given{expected};
@@ -269,7 +268,6 @@ TEST(Sorting, ShellSort_Ascending_Vector) {
 
     EXPECT_EQ(given, expected);
 }
-
 
 TEST(Sorting, ShellSort_Descending_Vector)
 {
@@ -350,8 +348,8 @@ TEST(Sorting, SelectionSort_Descending_List)
     EXPECT_EQ(given, expected);
 }
 
-
-TEST(Sorting, TimSort_Ascending_Vector) {
+TEST(Sorting, TimSort_Ascending_Vector)
+{
     vector<int> expected(range_size);
     std::iota(std::begin(expected), std::end(expected), 0);
     vector<int> given{expected};
@@ -364,7 +362,6 @@ TEST(Sorting, TimSort_Ascending_Vector) {
 
     EXPECT_EQ(given, expected);
 }
-
 
 TEST(Sorting, TimSort_Descending_Vector)
 {
@@ -382,7 +379,8 @@ TEST(Sorting, TimSort_Descending_Vector)
     EXPECT_EQ(given, expected);
 }
 
-TEST(Sorting, TreeSort_Ascending_Vector) {
+TEST(Sorting, TreeSort_Ascending_Vector)
+{
     vector<int> expected(range_size);
     std::iota(std::begin(expected), std::end(expected), 0);
     vector<int> given{expected};
@@ -395,7 +393,6 @@ TEST(Sorting, TreeSort_Ascending_Vector) {
 
     EXPECT_EQ(given, expected);
 }
-
 
 TEST(Sorting, TreeSort_Descending_Vector)
 {
@@ -413,7 +410,8 @@ TEST(Sorting, TreeSort_Descending_Vector)
     EXPECT_EQ(given, expected);
 }
 
-TEST(Sorting, BlockSort_Ascending_Vector) {
+TEST(Sorting, BlockSort_Ascending_Vector)
+{
     vector<int> expected(range_size);
     std::iota(std::begin(expected), std::end(expected), 0);
     vector<int> given{expected};
@@ -422,11 +420,8 @@ TEST(Sorting, BlockSort_Ascending_Vector) {
 
     shuffle(given, gen);
 
-    algo::block_sort(given);
-
-    EXPECT_EQ(given, expected);
+    EXPECT_EQ(std::move(given) | algo::block_sort_ascending, expected);
 }
-
 
 TEST(Sorting, BlockSort_Descending_Vector)
 {
@@ -439,8 +434,5 @@ TEST(Sorting, BlockSort_Descending_Vector)
 
     shuffle(given, gen);
 
-    algo::block_sort(given, greater<>{});
-
-    EXPECT_EQ(given, expected);
+    EXPECT_EQ(std::move(given) | algo::block_sort_decending, expected);
 }
-

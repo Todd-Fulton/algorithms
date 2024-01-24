@@ -17,7 +17,6 @@
 
 #pragma once
 
-// #include "sort/block_sort.hpp"
 #include "sort/insertion_sort.hpp"
 #include "sort/merge_sort.hpp"
 #include "sort/bubble_sort.hpp"
@@ -27,3 +26,7 @@
 #include "sort/selection_sort.hpp"
 #include "sort/tim_sort.hpp"
 #include "sort/tree_sort.hpp"
+
+
+#include "sort/block_sort.hpp"
+#include "sort/cube_sort.hpp"
