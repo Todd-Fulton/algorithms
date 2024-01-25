@@ -993,6 +993,143 @@ constexpr auto initial_sort(auto& rng, auto& iterator, auto const& compare)
     }
 }
 
+// merge 2 chunks at a time using an in memory cache
+constexpr auto merge_two_chunks(auto&& subrangeA,
+                                auto&& subrangeB,
+                                auto&& cache,
+                                auto&& compare)
+{
+
+    if (compare(*(ranges::end(subrangeB) - 1),
+                *ranges::begin(subrangeA))) {
+        // the two ranges are in reverse order, so a simple
+        // rotation should fix it
+        std::rotate(ranges::begin(subrangeA),
+                    ranges::end(subrangeA),
+                    ranges::end(subrangeB));
+    }
+    else if (compare(*ranges::begin(subrangeB),
+                     *(ranges::end(subrangeA) - 1))) {
+        // these two ranges weren't already in order, so
+        // we'll need to merge them!
+        ranges::copy(subrangeA, ranges::begin(cache));
+        MergeExternal(ranges::begin(subrangeA),
+                      ranges::end(subrangeA),
+                      ranges::begin(subrangeB),
+                      ranges::end(subrangeB),
+                      ranges::begin(cache),
+                      compare);
+    }
+}
+
+constexpr auto merge_two_chunks_cache(auto&& subrangeA,
+                                      auto&& subrangeB,
+                                      auto&& cache_itr,
+                                      auto&& compare)
+{
+
+    using difference_type = ranges::range_difference_t<
+        std::remove_cvref_t<decltype(subrangeA)>>;
+
+    // merge A1 and B1 into the cache
+    if (compare(*(ranges::end(subrangeB) - 1),
+                *ranges::begin(subrangeA))) {
+        // the two ranges are in reverse order, so copy
+        // them in reverse order into the cache
+        ranges::copy(subrangeB, cache_itr);
+        ranges::copy(subrangeA,
+                     cache_itr + difference_type(ranges::size(subrangeB)));
+    }
+    else if (compare(*ranges::begin(subrangeB),
+                     *(ranges::end(subrangeA) - 1))) {
+        // these two ranges weren't already in order, so
+        // merge them into the cache
+        ranges::merge(subrangeA, subrangeB, cache_itr, compare);
+    }
+    else {
+
+        // copy A1 and B1 into the cache in the same order
+        // at once
+        ranges::copy(
+            ranges::begin(subrangeA), ranges::end(subrangeB), cache_itr);
+    }
+}
+
+// merge 4 chunks at a time using an in memory cache
+constexpr auto merge_four_chunks(auto&& subrangeA1,
+                                 auto&& subrangeB1,
+                                 auto&& subrangeA2,
+                                 auto&& subrangeB2,
+                                 auto&& cache,
+                                 auto&& compare)
+{
+    using difference_type = ranges::range_difference_t<
+        std::remove_cvref_t<decltype(subrangeA1)>>;
+    // if A1, B1, A2, and B2 are all in order, skip
+    // doing anything else
+    if (!compare(*ranges::begin(subrangeB2),
+                 *(ranges::end(subrangeA2) - 1)) &&
+        !compare(*ranges::begin(subrangeA2),
+                 *(ranges::end(subrangeB1) - 1))) {
+        return;
+    }
+
+    // merge A1 and B1 into the cache
+    merge_two_chunks_cache(
+        subrangeA1, subrangeB1, ranges::begin(cache), compare);
+
+    // Next level A1
+    subrangeA1 = ranges::subrange(ranges::begin(subrangeA1),
+                                  ranges::end(subrangeB1));
+
+    // merge A2 and B2 into the cache
+    merge_two_chunks_cache(subrangeA2,
+                           subrangeB2,
+                           ranges::begin(cache) +
+                               difference_type(ranges::size(subrangeA1)),
+                           compare);
+
+    // next level A2
+    subrangeA2 = ranges::subrange(ranges::begin(subrangeA2),
+                                  ranges::end(subrangeB2));
+
+    // merge A1 and A2 from the cache into the array
+    // A3 and B3 are in cache taken to A1 and A2 in the array
+    // This is the next level of chunks merged ahead of time
+    auto subrangeA3 = ranges::subrange(
+        ranges::begin(cache),
+        ranges::begin(cache) + difference_type(ranges::size(subrangeA1)));
+
+    auto subrangeB3 = ranges::subrange(
+        ranges::begin(cache) + difference_type(ranges::size(subrangeA1)),
+        ranges::begin(cache) + difference_type(ranges::size(subrangeA1)) +
+            difference_type(ranges::size(subrangeA2)));
+
+    if (compare(*(ranges::end(subrangeB3) - 1),
+                *ranges::begin(subrangeA3))) {
+        // the two ranges are in reverse order, so copy
+        // them in reverse order into the array
+        ranges::copy(subrangeA3,
+                     ranges::begin(subrangeA1) +
+                         difference_type(ranges::size(subrangeA2)));
+        ranges::copy(subrangeB3, ranges::begin(subrangeA1));
+    }
+    else if (compare(*ranges::begin(subrangeB3),
+                     *(ranges::end(subrangeA3) - 1))) {
+        // these two ranges weren't already in order, so
+        // merge them back into the array
+        ranges::merge(
+            subrangeA3, subrangeB3, ranges::begin(subrangeA1), compare);
+    }
+    else {
+        // copy A3 and B3 into the array in the same order
+        // at once
+        ranges::copy(ranges::begin(subrangeA3),
+                     ranges::end(subrangeB3),
+                     ranges::begin(subrangeA1));
+    }
+}
+
 // sort using cache
 constexpr auto block_sort_cache(auto&& iterator,
                                 auto&& cache,
@@ -1010,125 +1147,12 @@ constexpr auto block_sort_cache(auto&& iterator,
         iterator.length() * 4 <= difference_type(ranges::size(range))) {
         iterator.begin();
         while (!iterator.finished()) {
-            // merge A1 and B1 into the cache
-            auto subrangeA1 = iterator.nextRange(range);
-            auto subrangeB1 = iterator.nextRange(range);
-            auto subrangeA2 = iterator.nextRange(range);
-            auto subrangeB2 = iterator.nextRange(range);
-
-            if (compare(*(ranges::end(subrangeB1) - 1),
-                        *ranges::begin(subrangeA1))) {
-                // the two ranges are in reverse order, so copy
-                // them in reverse order into the cache
-                ranges::copy(subrangeB1, ranges::begin(cache));
-                ranges::copy(
-                    subrangeA1,
-                    ranges::begin(cache) +
-                        difference_type(ranges::size(subrangeB1)));
-            }
-            else if (compare(*ranges::begin(subrangeB1),
-                             *(ranges::end(subrangeA1) - 1))) {
-                // these two ranges weren't already in order, so
-                // merge them into the cache
-                ranges::merge(
-                    subrangeA1, subrangeB1, ranges::begin(cache), compare);
-            }
-            else {
-                // if A1, B1, A2, and B2 are all in order, skip
-                // doing anything else
-                if (!compare(*ranges::begin(subrangeB2),
-                             *(ranges::end(subrangeA2) - 1)) &&
-                    !compare(*ranges::begin(subrangeA2),
-                             *(ranges::end(subrangeB1) - 1))) {
-                    continue;
-                }
-
-                // copy A1 and B1 into the cache in the same order
-                // at once
-                ranges::copy(ranges::begin(subrangeA1),
-                             ranges::end(subrangeB1),
-                             ranges::begin(cache));
-            }
-            subrangeA1 = ranges::subrange(ranges::begin(subrangeA1),
-                                          ranges::end(subrangeB1));
-
-            // merge A2 and B2 into the cache
-            if (compare(*(ranges::end(subrangeB2) - 1),
-                        *ranges::begin(subrangeA2))) {
-                // the two ranges are in reverse order, so copy
-                // them in reverse order into the cache
-                ranges::copy(
-                    subrangeA2,
-                    ranges::begin(cache) +
-                        difference_type(ranges::size(subrangeA1) +
-                                        ranges::size(subrangeB2)));
-                ranges::copy(
-                    subrangeB2,
-                    ranges::begin(cache) +
-                        difference_type(ranges::size(subrangeA1)));
-            }
-            else if (compare(*ranges::begin(subrangeB2),
-                             *(ranges::end(subrangeA2) - 1))) {
-                // these two ranges weren't already in order, so
-                // merge them into the cache
-                ranges::merge(
-                    subrangeA2,
-                    subrangeB2,
-                    ranges::begin(cache) +
-                        difference_type(ranges::size(subrangeA1)),
-                    compare);
-            }
-            else {
-                // copy A2 and B2 into the cache in the same order
-                // at once
-                ranges::copy(
-                    ranges::begin(subrangeA2),
-                    ranges::end(subrangeB2),
-                    ranges::begin(cache) +
-                        difference_type(ranges::size(subrangeA1)));
-            }
-            subrangeA2 = ranges::subrange(ranges::begin(subrangeA2),
-                                          ranges::end(subrangeB2));
-
-            // merge A1 and A2 from the cache into the array
-            auto subrangeA3 = ranges::subrange(
-                ranges::begin(cache),
-                ranges::begin(cache) +
-                    difference_type(ranges::size(subrangeA1)));
-
-            auto subrangeB3 = ranges::subrange(
-                ranges::begin(cache) +
-                    difference_type(ranges::size(subrangeA1)),
-                ranges::begin(cache) +
-                    difference_type(ranges::size(subrangeA1)) +
-                    difference_type(ranges::size(subrangeA2)));
-
-            if (compare(*(ranges::end(subrangeB3) - 1),
-                        *ranges::begin(subrangeA3))) {
-                // the two ranges are in reverse order, so copy
-                // them in reverse order into the array
-                ranges::copy(
-                    subrangeA3,
-                    ranges::begin(subrangeA1) +
-                        difference_type(ranges::size(subrangeA2)));
-                ranges::copy(subrangeB3, ranges::begin(subrangeA1));
-            }
-            else if (compare(*ranges::begin(subrangeB3),
-                             *(ranges::end(subrangeA3) - 1))) {
-                // these two ranges weren't already in order, so
-                // merge them back into the array
-                ranges::merge(subrangeA3,
-                              subrangeB3,
-                              ranges::begin(subrangeA1),
+            merge_four_chunks(iterator.nextRange(range),
+                              iterator.nextRange(range),
+                              iterator.nextRange(range),
+                              iterator.nextRange(range),
+                              cache,
                               compare);
-            }
-            else {
-                // copy A3 and B3 into the array in the same order
-                // at once
-                ranges::copy(ranges::begin(subrangeA3),
-                             ranges::end(subrangeB3),
-                             ranges::begin(subrangeA1));
-            }
         }
 
         // we merged two levels at the same time, so we're done
@@ -1139,29 +1163,10 @@ constexpr auto block_sort_cache(auto&& iterator,
     else {
         iterator.begin();
         while (!iterator.finished()) {
-            auto subrangeA = iterator.nextRange(range);
-            auto subrangeB = iterator.nextRange(range);
-
-            if (compare(*(ranges::end(subrangeB) - 1),
-                        *ranges::begin(subrangeA))) {
-                // the two ranges are in reverse order, so a simple
-                // rotation should fix it
-                std::rotate(ranges::begin(subrangeA),
-                            ranges::end(subrangeA),
-                            ranges::end(subrangeB));
-            }
-            else if (compare(*ranges::begin(subrangeB),
-                             *(ranges::end(subrangeA) - 1))) {
-                // these two ranges weren't already in order, so
-                // we'll need to merge them!
-                ranges::copy(subrangeA, ranges::begin(cache));
-                MergeExternal(ranges::begin(subrangeA),
-                              ranges::end(subrangeA),
-                              ranges::begin(subrangeB),
-                              ranges::end(subrangeB),
-                              ranges::begin(cache),
-                              compare);
-            }
+            merge_two_chunks(iterator.nextRange(range),
+                             iterator.nextRange(range),
+                             cache,
+                             compare);
         }
     }
 }
@@ -1255,8 +1260,8 @@ constexpr auto block_sort_internal(auto&& iterator,
             ranges::subrange firstA(
                 ranges::begin(subrangeA),
                 ranges::begin(subrangeA) +
-                    difference_type(ranges::size(blockA) %
-                                    buffers.block_size));
+                    (difference_type(ranges::size(blockA)) %
+                     buffers.block_size));
 
             // swap the first value of each A block with the values
             // in buffer1
@@ -1374,7 +1379,7 @@ constexpr auto block_sort_internal(auto&& iterator,
                             // we need it to be when we go to merge
                             // it anyway
                             if (buffers.block_size <=
-                                ranges::size(cache)) {
+                                difference_type(ranges::size(cache))) {
                                 ranges::copy(ranges::begin(blockA),
                                              ranges::begin(blockA) +
                                                  buffers.block_size,
@@ -1441,9 +1446,10 @@ constexpr auto block_sort_internal(auto&& iterator,
                                        ranges::begin(blockB),
                                        ranges::end(blockB));
 
-                        lastB = ranges::subrange(ranges::begin(blockA),
-                                                 ranges::begin(blockA) +
-                                                     ranges::size(blockB));
+                        lastB = ranges::subrange(
+                            ranges::begin(blockA),
+                            ranges::begin(blockA) +
+                                difference_type(ranges::size(blockB)));
                         blockA = shift_range(blockA, ranges::size(blockB));
                         blockB = adjust_end(
                             blockB,
@@ -1523,8 +1529,7 @@ constexpr auto block_sort_internal(auto&& iterator,
 
     for (buffers.pull_index = 0; buffers.pull_index < 2;
          ++buffers.pull_index) {
-        std::size_t unique =
-            buffers.pull_itrs[buffers.pull_index].count * 2;
+        auto unique = buffers.pull_itrs[buffers.pull_index].count * 2;
         if (buffers.pull_itrs[buffers.pull_index].from >
             buffers.pull_itrs[buffers.pull_index].to) {
             // the values were pulled out to the left, so
@@ -1656,10 +1661,22 @@ struct block_sort_adapter
                           adapter.cache_size);
     }
 
-    constexpr auto operator()(ranges::contiguous_range auto&& range)
+    constexpr auto operator()(ranges::contiguous_range auto&& range) const
     {
         return block_sort(
             std::forward<decltype(range)>(range), compare, cache_size);
+    }
+
+    constexpr auto operator()(size_t cache_sz) const
+    {
+        return block_sort_adapter{compare, cache_sz};
+    }
+
+    constexpr auto operator()(ranges::contiguous_range auto&& range,
+                              size_t cache_sz) const
+    {
+        return block_sort(
+            std::forward<decltype(range)>(range), compare, cache_sz);
     }
 };
 
