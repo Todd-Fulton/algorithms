@@ -7,20 +7,26 @@
     "fmt",
     "range-v3",
     {
+      "name": "liburing",
+      "platform": "(linux & x64)"
+    },
+    {
       "name": "libunifex",
-      "features" : ["coroutines"]
+      "features": [
+        "coroutines"
+      ]
     }
   ],
-  "features" : {
-    "tests" : {
-      "description" : "Build the tests for algorithms.",
-      "dependencies" : [
+  "features": {
+    "tests": {
+      "description": "Build the tests for algorithms.",
+      "dependencies": [
         "gtest"
       ]
     },
-    "benchmarks" : {
-      "description" : "Build the benchmarks for algorithms.",
-      "dependencies" : [
+    "benchmarks": {
+      "description": "Build the benchmarks for algorithms.",
+      "dependencies": [
         "benchmark"
       ]
     }
