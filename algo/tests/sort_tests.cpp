@@ -436,3 +436,61 @@ TEST(Sorting, BlockSort_Descending_Vector)
 
     EXPECT_EQ(std::move(given) | algo::block_sort_decending, expected);
 }
+
+TEST(Sorting, BlockSort_Ascending_NoCache_Vector)
+{
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
+    vector<int> given{expected};
+
+    mt19937 gen{seed}; // NOLINT
+
+    shuffle(given, gen);
+
+    EXPECT_EQ(std::move(given) | algo::block_sort_ascending(0), expected);
+}
+
+TEST(Sorting, BlockSort_Descending_NoCache_Vector)
+{
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
+    std::ranges::reverse(expected);
+    vector<int> given{expected};
+
+    mt19937 gen{seed}; // NOLINT
+
+    shuffle(given, gen);
+
+    EXPECT_EQ(std::move(given) | algo::block_sort_decending(0), expected);
+}
+
+TEST(Sorting, BlockSort_Ascending_SmallCache_Vector)
+{
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
+    vector<int> given{expected};
+
+    mt19937 gen{seed}; // NOLINT
+
+    shuffle(given, gen);
+
+    EXPECT_EQ(std::move(given) | algo::block_sort_ascending(
+                                     ranges::size(expected) / 4 + 1),
+              expected);
+}
+
+TEST(Sorting, BlockSort_Descending_SmallCache_Vector)
+{
+    vector<int> expected(range_size);
+    std::iota(std::begin(expected), std::end(expected), 0);
+    std::ranges::reverse(expected);
+    vector<int> given{expected};
+
+    mt19937 gen{seed}; // NOLINT
+
+    shuffle(given, gen);
+
+    EXPECT_EQ(std::move(given) | algo::block_sort_decending(
+                                     ranges::size(expected) / 4 + 1),
+              expected);
+}
