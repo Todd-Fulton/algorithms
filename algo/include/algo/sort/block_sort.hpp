@@ -871,7 +871,7 @@ constexpr auto make_cache(std::size_t range_size,
 }
 
 template <class RNG, class CMP = std::less<>>
-constexpr auto sort_4(RNG& rng, CMP const& compare = {})
+constexpr auto sort_four(RNG& rng, CMP const& compare = {})
 {
     using difference_type = ranges::range_difference_t<RNG>;
     using std::swap;
@@ -1063,8 +1063,6 @@ constexpr auto merge_four_chunks(auto&& subrangeA1,
                                  auto&& cache,
                                  auto&& compare)
 {
-    using difference_type = ranges::range_difference_t<
-        std::remove_cvref_t<decltype(subrangeA1)>>;
     // if A1, B1, A2, and B2 are all in order, skip
     // doing anything else
     if (!compare(*ranges::begin(subrangeB2),
@@ -1074,60 +1072,36 @@ constexpr auto merge_four_chunks(auto&& subrangeA1,
         return;
     }
 
+    // Next level
+    auto level2_a_size = ranges::distance(ranges::begin(subrangeA1),
+                                          ranges::end(subrangeB1));
+    auto level2_b_size = ranges::distance(ranges::begin(subrangeA2),
+                                          ranges::end(subrangeB2));
+    auto l2_cache = ranges::begin(subrangeA1);
+
     // merge A1 and B1 into the cache
-    merge_two_chunks_cache(
-        subrangeA1, subrangeB1, ranges::begin(cache), compare);
-
-    // Next level A1
-    subrangeA1 = ranges::subrange(ranges::begin(subrangeA1),
-                                  ranges::end(subrangeB1));
-
-    // merge A2 and B2 into the cache
-    merge_two_chunks_cache(subrangeA2,
-                           subrangeB2,
-                           ranges::begin(cache) +
-                               difference_type(ranges::size(subrangeA1)),
+    merge_two_chunks_cache(std::forward<decltype(subrangeA1)>(subrangeA1),
+                           std::forward<decltype(subrangeB1)>(subrangeB1),
+                           ranges::begin(cache),
                            compare);
 
-    // next level A2
-    subrangeA2 = ranges::subrange(ranges::begin(subrangeA2),
-                                  ranges::end(subrangeB2));
+    // merge A2 and B2 into the cache
+    merge_two_chunks_cache(std::forward<decltype(subrangeA2)>(subrangeA2),
+                           std::forward<decltype(subrangeB2)>(subrangeB2),
+                           ranges::begin(cache) + level2_a_size,
+                           compare);
 
     // merge A1 and A2 from the cache into the array
     // A3 and B3 are in cache taken to A1 and A2 in the array
     // This is the next level of chunks merged ahead of time
-    auto subrangeA3 = ranges::subrange(
-        ranges::begin(cache),
-        ranges::begin(cache) + difference_type(ranges::size(subrangeA1)));
-
-    auto subrangeB3 = ranges::subrange(
-        ranges::begin(cache) + difference_type(ranges::size(subrangeA1)),
-        ranges::begin(cache) + difference_type(ranges::size(subrangeA1)) +
-            difference_type(ranges::size(subrangeA2)));
-
-    if (compare(*(ranges::end(subrangeB3) - 1),
-                *ranges::begin(subrangeA3))) {
-        // the two ranges are in reverse order, so copy
-        // them in reverse order into the array
-        ranges::copy(subrangeA3,
-                     ranges::begin(subrangeA1) +
-                         difference_type(ranges::size(subrangeA2)));
-        ranges::copy(subrangeB3, ranges::begin(subrangeA1));
-    }
-    else if (compare(*ranges::begin(subrangeB3),
-                     *(ranges::end(subrangeA3) - 1))) {
-        // these two ranges weren't already in order, so
-        // merge them back into the array
-        ranges::merge(
-            subrangeA3, subrangeB3, ranges::begin(subrangeA1), compare);
-    }
-    else {
-        // copy A3 and B3 into the array in the same order
-        // at once
-        ranges::copy(ranges::begin(subrangeA3),
-                     ranges::end(subrangeB3),
-                     ranges::begin(subrangeA1));
-    }
+    merge_two_chunks_cache(
+        ranges::subrange(ranges::begin(cache),
+                         ranges::begin(cache) + level2_a_size),
+        ranges::subrange(ranges::begin(cache) + level2_a_size,
+                         ranges::begin(cache) + level2_a_size +
+                             level2_b_size),
+        l2_cache,
+        compare);
 }
 
 // sort using cache
@@ -1606,7 +1580,7 @@ constexpr auto block_sort(RANGE range,
 
     // if the array is of size 0, 1, 2, or 3, just sort them like so:
     if (ranges::size(range) < 4) {
-        sort_4(range, compare);
+        sort_four(range, compare);
         return range;
     }
 
