@@ -5,7 +5,11 @@
   "description": "Algorithms for c++",
   "dependencies": [
     "fmt",
-    "range-v3"
+    "range-v3",
+    {
+      "name": "libunifex",
+      "features" : ["coroutines"]
+    }
   ],
   "features" : {
     "tests" : {

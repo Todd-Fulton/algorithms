@@ -11,66 +11,56 @@
 #pragma once
 
 #include <algorithm>
+#include <bit>
 #include <cassert>
 #include <cmath>
 #include <iterator>
-#include <limits>
 
 #include <range/v3/all.hpp>
+
+#if defined(__clang__)
+#define ASSUME(expr) __builtin_assume(expr)
+#elif defined(__GNUC__) && !defined(__ICC)
+#define ASSUME(expr)                                                      \
+    if (expr) {}                                                          \
+    else {                                                                \
+        __builtin_unreachable();                                          \
+    }
+#elif defined(_MSC_VER) || defined(__ICC)
+#define ASSUME(expr) __assume(expr)
+#endif
 
 namespace algo
 {
 namespace _block_sort
 {
 
-// structure to represent ranges within the array
-template <typename Iterator>
-struct Range
+constexpr auto adjust_begin(auto& range, auto diff)
 {
-    Iterator start;
-    Iterator end;
+    using difference_type =
+        ranges::range_difference_t<std::remove_cvref_t<decltype(range)>>;
 
-    constexpr Range() = default;
-
-    Range(Iterator start, Iterator end)
-        : start(start)
-        , end(end)
-    {
-    }
-
-    template <class RANGE>
-    requires(ranges::range<std::remove_cvref_t<RANGE>>)
-    constexpr explicit Range(RANGE&& range)
-        : start{ranges::begin(range)}
-        , end{ranges::end(range)}
-    {
-    }
-
-    [[nodiscard]] std::size_t length() const
-    {
-        return std::distance(start, end);
-    }
-};
-
-template <class RANGE>
-Range(RANGE& range) -> Range<ranges::iterator_t<RANGE>>;
-
-// toolbox functions used by the sorter
-
-// 63 -> 32, 64 -> 64, etc.
-// this comes from Hacker's Delight
-auto Hyperfloor(auto value)
-{
-    for (std::size_t i = 1;
-         i <= std::numeric_limits<
-                  std::remove_cvref_t<decltype(value)>>::digits /
-                  2;
-         i <<= 1U) {
-        value |= (value >> i);
-    }
-    return value - (value >> 1U);
+    return ranges::subrange(ranges::begin(range) + difference_type(diff),
+                            ranges::end(range));
 }
 
+constexpr auto adjust_end(auto& range, auto diff)
+{
+    using difference_type =
+        ranges::range_difference_t<std::remove_cvref_t<decltype(range)>>;
+
+    return ranges::subrange(ranges::begin(range),
+                            ranges::end(range) + difference_type(diff));
+}
+
+constexpr auto shift_range(auto& range, auto diff)
+{
+    using difference_type =
+        ranges::range_difference_t<std::remove_cvref_t<decltype(range)>>;
+
+    return ranges::subrange(ranges::begin(range) + difference_type(diff),
+                            ranges::end(range) + difference_type(diff));
+}
 // combine a linear search with a binary search to reduce the number of
 // comparisons in situations where have some idea as to how many unique
 // values there are and where the next value might be
@@ -79,14 +69,18 @@ RandomAccessIterator FindFirstForward(RandomAccessIterator first,
                                       RandomAccessIterator last,
                                       const T& value,
                                       Comparison compare,
-                                      std::size_t unique)
+                                      auto unique)
 {
-    std::size_t size = std::distance(first, last);
+    using difference_type =
+        std::iterator_traits<RandomAccessIterator>::difference_type;
+
+    auto size = std::distance(first, last);
     if (size == 0) {
         return first;
     }
 
-    std::size_t skip = std::max(size / unique, std::size_t(1));
+    auto skip =
+        std::max(size / difference_type(unique), difference_type(1));
 
     RandomAccessIterator index;
     for (index = first + skip; compare(*(index - 1), value);
@@ -103,14 +97,18 @@ RandomAccessIterator FindLastForward(RandomAccessIterator first,
                                      RandomAccessIterator last,
                                      const T& value,
                                      Comparison compare,
-                                     std::size_t unique)
+                                     auto unique)
 {
-    std::size_t size = std::distance(first, last);
+    using difference_type =
+        std::iterator_traits<RandomAccessIterator>::difference_type;
+
+    auto size = std::distance(first, last);
     if (size == 0) {
         return first;
     }
 
-    std::size_t skip = std::max(size / unique, std::size_t(1));
+    auto skip =
+        std::max(size / difference_type(unique), difference_type(1));
 
     RandomAccessIterator index;
     for (index = first + skip; !compare(value, *(index - 1));
@@ -127,14 +125,18 @@ RandomAccessIterator FindFirstBackward(RandomAccessIterator first,
                                        RandomAccessIterator last,
                                        const T& value,
                                        Comparison compare,
-                                       std::size_t unique)
+                                       auto unique)
 {
-    std::size_t size = std::distance(first, last);
+    using difference_type =
+        std::iterator_traits<RandomAccessIterator>::difference_type;
+
+    auto size = std::distance(first, last);
     if (size == 0) {
         return first;
     }
 
-    std::size_t skip = std::max(size / unique, std::size_t(1));
+    auto skip =
+        std::max(size / difference_type(unique), difference_type(1));
 
     RandomAccessIterator index;
     for (index = last - skip;
@@ -152,14 +154,18 @@ RandomAccessIterator FindLastBackward(RandomAccessIterator first,
                                       RandomAccessIterator last,
                                       const T& value,
                                       Comparison compare,
-                                      std::size_t unique)
+                                      auto unique)
 {
-    std::size_t size = std::distance(first, last);
+    using difference_type =
+        std::iterator_traits<RandomAccessIterator>::difference_type;
+
+    auto size = std::distance(first, last);
     if (size == 0) {
         return first;
     }
 
-    std::size_t skip = std::max(size / unique, std::size_t(1));
+    auto skip =
+        std::max(size / difference_type(unique), difference_type(1));
 
     RandomAccessIterator index;
     for (index = last - skip;
@@ -177,8 +183,9 @@ void InsertionSort(BidirectionalIterator first,
                    BidirectionalIterator last,
                    Comparison compare)
 {
-    typedef
-        typename std::iterator_traits<BidirectionalIterator>::value_type T;
+    using value_type =
+        std::iterator_traits<BidirectionalIterator>::value_type;
+
     if (first == last) {
         return;
     }
@@ -190,8 +197,8 @@ void InsertionSort(BidirectionalIterator first,
         // Compare first so we can avoid 2 moves for
         // an element already positioned correctly.
         if (compare(*sift, *sift_1)) {
-            T tmp = *sift;
-            do {
+            value_type tmp = *sift;
+            do { // NOLINT
                 *sift-- = *sift_1;
             } while (sift != first && compare(tmp, *--sift_1));
             *sift = tmp;
@@ -210,9 +217,13 @@ void MergeExternal(RandomAccessIterator1 first1,
                    RandomAccessIterator2 cache,
                    Comparison compare)
 {
+    using difference_type =
+        std::iterator_traits<RandomAccessIterator1>::difference_type;
+
     // A fits into the cache, so use that instead of the internal buffer
     RandomAccessIterator2 A_index = cache;
-    RandomAccessIterator2 A_last = cache + std::distance(first1, last1);
+    RandomAccessIterator2 A_last =
+        cache + difference_type(std::distance(first1, last1));
     RandomAccessIterator1 B_index = first2;
     RandomAccessIterator1 B_last = last2;
     RandomAccessIterator1 insert_index = first1;
@@ -255,9 +266,13 @@ void MergeInternal(RandomAccessIterator first1,
     // value that's already in that spot when this algorithm is finished,
     // 'buffer' will contain its original contents, but in a different
     // order
+    using difference_type =
+        std::iterator_traits<RandomAccessIterator>::difference_type;
+
     RandomAccessIterator A_index = buffer;
     RandomAccessIterator B_index = first2;
-    RandomAccessIterator A_last = buffer + std::distance(first1, last1);
+    RandomAccessIterator A_last =
+        buffer + difference_type(std::distance(first1, last1));
     RandomAccessIterator B_last = last2;
     RandomAccessIterator insert_index = first1;
 
@@ -322,6 +337,9 @@ void MergeInPlace(RandomAccessIterator first1,
      places
      */
 
+    using difference_type =
+        std::iterator_traits<RandomAccessIterator>::difference_type;
+
     while (true) {
         // find the first place in B where the first item in A needs to be
         // inserted
@@ -329,7 +347,7 @@ void MergeInPlace(RandomAccessIterator first1,
             std::lower_bound(first2, last2, *first1, compare);
 
         // rotate A into place
-        std::size_t amount = mid - last1;
+        difference_type amount = mid - last1;
         std::rotate(first1, last1, mid);
         if (last2 == mid) {
             break;
@@ -350,16 +368,19 @@ void MergeInPlace(RandomAccessIterator first1,
 // the bottom-up merge sort only operates on values that are powers of two,
 // so scale down to that power of two, then use a fraction to scale back
 // again
+template <class RangeType>
 class Iterator
 {
-    std::size_t size, power_of_two;
-    std::size_t decimal{}, numerator{}, denominator;
-    std::size_t decimal_step, numerator_step;
+    using difference_type = ranges::range_difference_t<RangeType>;
+
+    difference_type size, power_of_two;
+    difference_type decimal{}, numerator{}, denominator;
+    difference_type decimal_step, numerator_step;
 
 public:
-    Iterator(std::size_t size, std::size_t min_level)
+    Iterator(difference_type size, difference_type min_level)
         : size(size)
-        , power_of_two(Hyperfloor(size))
+        , power_of_two(difference_type(std::bit_floor(size_t(size))))
         , denominator(power_of_two / min_level)
         , decimal_step(size / denominator)
         , numerator_step(size % denominator)
@@ -372,9 +393,10 @@ public:
     }
 
     template <ranges::random_access_range RANGE>
-    auto nextRange(RANGE& range) -> Range<ranges::iterator_t<RANGE>>
+    auto nextRange(RANGE& range)
+        -> ranges::subrange<ranges::iterator_t<RANGE>>
     {
-        std::size_t start = decimal;
+        auto start = decimal;
 
         decimal += decimal_step;
         numerator += numerator_step;
@@ -383,8 +405,8 @@ public:
             ++decimal;
         }
 
-        return Range<ranges::iterator_t<RANGE>>(
-            ranges::begin(range) + start, ranges::begin(range) + decimal);
+        return ranges::subrange(ranges::begin(range) + start,
+                                ranges::begin(range) + decimal);
     }
 
     [[nodiscard]] bool finished() const
@@ -404,7 +426,7 @@ public:
         return decimal_step < size;
     }
 
-    [[nodiscard]] std::size_t length() const
+    [[nodiscard]] auto length() const
     {
         return decimal_step;
     }
@@ -413,25 +435,27 @@ public:
 template <class RandomAccessIterator>
 struct InternalBuffers
 {
+    using difference_type =
+        std::iterator_traits<RandomAccessIterator>::difference_type;
 
     // as an optimization, we really only need to pull out the
     // internal buffers once for each level of merges after that we
     // can reuse the same buffers over and over, then redistribute
     // it when we're finished with this level
-    std::size_t block_size;
-    std::size_t buffer_size;
-    std::size_t find;
-    std::size_t count = 0;
+    difference_type block_size;
+    difference_type buffer_size;
+    difference_type find;
+    difference_type count = 0;
     std::size_t pull_index = 0;
-    Range<RandomAccessIterator> buffer1{};
-    Range<RandomAccessIterator> buffer2{};
+    ranges::subrange<RandomAccessIterator> buffer1{};
+    ranges::subrange<RandomAccessIterator> buffer2{};
     RandomAccessIterator buffer_index;
     RandomAccessIterator last;
     struct PullItr
     {
         RandomAccessIterator from{}, to{};
-        std::size_t count{};
-        Range<RandomAccessIterator> range;
+        difference_type count{};
+        ranges::subrange<RandomAccessIterator> range;
 
         constexpr explicit PullItr(
             ranges::random_access_range auto&& range)
@@ -444,10 +468,10 @@ struct InternalBuffers
 
     constexpr explicit InternalBuffers(
         ranges::random_access_range auto&& range,
-        std::size_t length,
+        difference_type length,
         std::size_t cache_size)
-        : block_size{std::size_t(std::sqrt(length))}
-        , buffer_size{length / block_size + 1}
+        : block_size{difference_type(std::sqrt(length))}
+        , buffer_size{difference_type(length) / block_size + 1}
         , find{buffer_size + buffer_size}
         , buffer1{range}
         , buffer2{range}
@@ -456,13 +480,13 @@ struct InternalBuffers
         // find two internal buffers of size 'buffer_size' each
         // let's try finding both buffers at the same time from a
         // single A or B subarray
-        if (block_size <= cache_size) {
+        if (block_size <= difference_type(cache_size)) {
             // if every A block fits into the cache then we won't need
             // the second internal buffer, so we really only need to
             // find 'buffer_size' unique values
             find = buffer_size;
         }
-        else if (find > length) {
+        else if (find > difference_type(length)) {
             // we can't fit both buffers into the same A or B subarray,
             // so find two buffers separately
             find = buffer_size;
@@ -473,13 +497,15 @@ struct InternalBuffers
     // just store information about where the values will be
     // pulled from and to, as well as how many values there
     // are, to create the two internal buffers
-    constexpr auto pull(auto&& _to, auto&& start, auto&& end)
+    constexpr auto pull(auto&& destination, auto&& start, auto&& end)
     {
         pull_itrs[pull_index].range =
-            Range<RandomAccessIterator>(start, end);
+            ranges::subrange(std::forward<decltype(start)>(start),
+                             std::forward<decltype(end)>(end));
         pull_itrs[pull_index].count = count;
         pull_itrs[pull_index].from = buffer_index;
-        pull_itrs[pull_index].to = _to;
+        pull_itrs[pull_index].to =
+            std::forward<decltype(destination)>(destination);
     }
 
     constexpr auto unique(auto&& subrangeA,
@@ -499,14 +525,17 @@ struct InternalBuffers
         // check A for the number of unique values we need to fill
         // an internal buffer these values will be pulled out to
         // the start of A
-        for (last = subrangeA.start, count = 1; count < find;
+        for (last = ranges::begin(subrangeA), count = 1; count < find;
              last = buffer_index, ++count) {
-            buffer_index = FindLastForward(
-                last + 1, subrangeA.end, *last, compare, find - count);
-            if (buffer_index == subrangeA.end) {
+            buffer_index = FindLastForward(last + 1,
+                                           ranges::end(subrangeA),
+                                           *last,
+                                           compare,
+                                           find - count);
+            if (buffer_index == ranges::end(subrangeA)) {
                 break;
             }
-            assert(buffer_index < subrangeA.end);
+            assert(buffer_index < ranges::end(subrangeA));
         }
         buffer_index = last;
 
@@ -514,7 +543,9 @@ struct InternalBuffers
             // keep track of the range within the array where we'll
             // need to "pull out" these values to create the
             // internal buffer
-            pull(subrangeA.start, subrangeA.start, subrangeB.end);
+            pull(ranges::begin(subrangeA),
+                 ranges::begin(subrangeA),
+                 ranges::end(subrangeB));
             pull_index = 1;
 
             if (count == buffer_size + buffer_size) {
@@ -522,11 +553,14 @@ struct InternalBuffers
                 // containing 2√A unique values, so this section
                 // can be used to contain both of the internal
                 // buffers we'll need
-                buffer1 = Range<RandomAccessIterator>(
-                    subrangeA.start, subrangeA.start + buffer_size);
-                buffer2 = Range<RandomAccessIterator>(
-                    subrangeA.start + buffer_size,
-                    subrangeA.start + count);
+                buffer1 =
+                    ranges::subrange(ranges::begin(subrangeA),
+                                     ranges::begin(subrangeA) +
+                                         difference_type(buffer_size));
+                buffer2 = ranges::subrange(
+                    ranges::begin(subrangeA) +
+                        difference_type(buffer_size),
+                    ranges::begin(subrangeA) + difference_type(count));
                 return true;
             }
             else if (find == buffer_size + buffer_size) {
@@ -534,37 +568,45 @@ struct InternalBuffers
                 // unique values, but did not contain the full 2√A
                 // unique values, so we still need to find a second
                 // separate buffer of at least √A unique values
-                buffer1 = Range<RandomAccessIterator>(
-                    subrangeA.start, subrangeA.start + count);
+                buffer1 = ranges::subrange(ranges::begin(subrangeA),
+                                           ranges::begin(subrangeA) +
+                                               difference_type(count));
                 find = buffer_size;
             }
-            else if (block_size <= cache_size) {
+            else if (block_size <= difference_type(cache_size)) {
                 // we found the first and only internal buffer that
                 // we need, so we're done!
-                buffer1 = Range<RandomAccessIterator>(
-                    subrangeA.start, subrangeA.start + count);
+                buffer1 = ranges::subrange(ranges::begin(subrangeA),
+                                           ranges::begin(subrangeA) +
+                                               difference_type(count));
                 return true;
             }
             else if (find_separately) {
                 // found one buffer, but now find the other one
-                buffer1 = Range<RandomAccessIterator>(
-                    subrangeA.start, subrangeA.start + count);
+                buffer1 = ranges::subrange(ranges::begin(subrangeA),
+                                           ranges::begin(subrangeA) +
+                                               difference_type(count));
                 find_separately = false;
             }
             else {
                 // we found a second buffer in an 'A' subarray
                 // containing √A unique values, so we're done!
-                buffer2 = Range<RandomAccessIterator>(
-                    subrangeA.start, subrangeA.start + count);
+                buffer2 = ranges::subrange(ranges::begin(subrangeA),
+                                           ranges::begin(subrangeA) +
+                                               difference_type(count));
                 return true;
             }
         }
-        else if (pull_index == 0 && count > buffer1.length()) {
+        else if (pull_index == 0 &&
+                 count > difference_type(ranges::size(buffer1))) {
             // keep track of the largest buffer we were able to
             // find
-            buffer1 = Range<RandomAccessIterator>(subrangeA.start,
-                                                  subrangeA.start + count);
-            pull(subrangeA.start, subrangeA.start, subrangeB.end);
+            buffer1 = ranges::subrange(ranges::begin(subrangeA),
+                                       ranges::begin(subrangeA) +
+                                           difference_type(count));
+            pull(ranges::begin(subrangeA),
+                 ranges::begin(subrangeA),
+                 ranges::end(subrangeB));
         }
 
         return false;
@@ -578,14 +620,17 @@ struct InternalBuffers
         // check B for the number of unique values we need to fill
         // an internal buffer these values will be pulled out to
         // the end of B
-        for (last = subrangeB.end - 1, count = 1; count < find;
+        for (last = ranges::end(subrangeB) - 1, count = 1; count < find;
              last = buffer_index - 1, ++count) {
-            buffer_index = FindFirstBackward(
-                subrangeB.start, last, *last, compare, find - count);
-            if (buffer_index == subrangeB.start) {
+            buffer_index = FindFirstBackward(ranges::begin(subrangeB),
+                                             last,
+                                             *last,
+                                             compare,
+                                             find - count);
+            if (buffer_index == ranges::begin(subrangeB)) {
                 break;
             }
-            assert(buffer_index > subrangeB.start);
+            assert(buffer_index > ranges::begin(subrangeB));
         }
         buffer_index = last;
 
@@ -593,7 +638,9 @@ struct InternalBuffers
             // keep track of the range within the array where we'll
             // need to "pull out" these values to create the
             // internal buffer
-            pull(subrangeB.end, subrangeA.start, subrangeB.end);
+            pull(ranges::end(subrangeB),
+                 ranges::begin(subrangeA),
+                 ranges::end(subrangeB));
             pull_index = 1;
 
             if (count == buffer_size + buffer_size) {
@@ -601,10 +648,12 @@ struct InternalBuffers
                 // containing 2√A unique values, so this section
                 // can be used to contain both of the internal
                 // buffers we'll need
-                buffer1 = Range<RandomAccessIterator>(
-                    subrangeB.end - count, subrangeB.end - buffer_size);
-                buffer2 = Range<RandomAccessIterator>(
-                    subrangeB.end - buffer_size, subrangeB.end);
+                buffer1 = ranges::subrange(
+                    ranges::end(subrangeB) - difference_type(count),
+                    ranges::end(subrangeB) - difference_type(buffer_size));
+                buffer2 = ranges::subrange(
+                    ranges::end(subrangeB) - difference_type(buffer_size),
+                    ranges::end(subrangeB));
                 return true;
             }
             else if (find == buffer_size + buffer_size) {
@@ -612,21 +661,24 @@ struct InternalBuffers
                 // unique values, but did not contain the full 2√A
                 // unique values, so we still need to find a second
                 // separate buffer of at least √A unique values
-                buffer1 = Range<RandomAccessIterator>(
-                    subrangeB.end - count, subrangeB.end);
+                buffer1 = ranges::subrange(ranges::end(subrangeB) -
+                                               difference_type(count),
+                                           ranges::end(subrangeB));
                 find = buffer_size;
             }
-            else if (block_size <= cache_size) {
+            else if (block_size <= difference_type(cache_size)) {
                 // we found the first and only internal buffer that
                 // we need, so we're done!
-                buffer1 = Range<RandomAccessIterator>(
-                    subrangeB.end - count, subrangeB.end);
+                buffer1 = ranges::subrange(ranges::end(subrangeB) -
+                                               difference_type(count),
+                                           ranges::end(subrangeB));
                 return true;
             }
             else if (find_separately) {
                 // found one buffer, but now find the other one
-                buffer1 = Range<RandomAccessIterator>(
-                    subrangeB.end - count, subrangeB.end);
+                buffer1 = ranges::subrange(ranges::end(subrangeB) -
+                                               difference_type(count),
+                                           ranges::end(subrangeB));
                 find_separately = false;
             }
             else {
@@ -636,51 +688,62 @@ struct InternalBuffers
                 // the end point for that A subarray so it knows to
                 // stop redistributing its values before reaching
                 // buffer2
-                if (pull_itrs[0].range.start == subrangeA.start) {
-                    pull_itrs[0].range.end -= pull_itrs[1].count;
+                if (ranges::begin(pull_itrs[0].range) ==
+                    ranges::begin(subrangeA)) {
+                    pull_itrs[0].range =
+                        adjust_end(pull_itrs[0].range,
+                                   -difference_type(pull_itrs[1].count));
                 }
 
                 // we found a second buffer in a 'B' subarray
                 // containing √A unique values, so we're done!
-                buffer2 = Range<RandomAccessIterator>(
-                    subrangeB.end - count, subrangeB.end);
+                buffer2 = ranges::subrange(ranges::end(subrangeB) -
+                                               difference_type(count),
+                                           ranges::end(subrangeB));
                 return true;
             }
         }
-        else if (pull_index == 0 && count > buffer1.length()) {
+        else if (pull_index == 0 &&
+                 count > difference_type(ranges::size(buffer1))) {
             // keep track of the largest buffer we were able to
             // find
-            buffer1 = Range<RandomAccessIterator>(subrangeB.end - count,
-                                                  subrangeB.end);
-            pull(subrangeB.end, subrangeA.start, subrangeB.end);
+            buffer1 = ranges::subrange(ranges::end(subrangeB) -
+                                           difference_type(count),
+                                       ranges::end(subrangeB));
+            pull(ranges::end(subrangeB),
+                 ranges::begin(subrangeA),
+                 ranges::end(subrangeB));
         }
 
         return false;
     }
 
-    constexpr auto initialize_buffers(std::size_t chunk_length,
+    constexpr auto initialize_buffers(auto chunk_length,
                                       auto const& compare)
     {
         // pull out the two ranges so we can use them as internal
         // buffers
         for (pull_index = 0; pull_index < 2; ++pull_index) {
-            std::size_t length = pull_itrs[pull_index].count;
+            auto length = pull_itrs[pull_index].count;
 
             if (pull_itrs[pull_index].to < pull_itrs[pull_index].from) {
                 // we're pulling the values out to the left, which
                 // means the start of an A subarray
                 buffer_index = pull_itrs[pull_index].from;
                 for (count = 1; count < length; ++count) {
-                    buffer_index = FindFirstBackward(
-                        pull_itrs[pull_index].to,
-                        pull_itrs[pull_index].from - (count - 1),
-                        *(buffer_index - 1),
-                        compare,
-                        length - count);
-                    Range<RandomAccessIterator> left(
+                    buffer_index =
+                        FindFirstBackward(pull_itrs[pull_index].to,
+                                          pull_itrs[pull_index].from -
+                                              (difference_type(count) - 1),
+                                          *(buffer_index - 1),
+                                          compare,
+                                          length - count);
+                    auto left = ranges::subrange(
                         buffer_index + 1, pull_itrs[pull_index].from + 1);
-                    std::rotate(left.start, left.end - count, left.end);
-                    pull_itrs[pull_index].from = buffer_index + count;
+                    ranges::rotate(
+                        left, ranges::end(left) - difference_type(count));
+                    pull_itrs[pull_index].from =
+                        buffer_index + difference_type(count);
                 }
             }
             else if (pull_itrs[pull_index].to >
@@ -695,18 +758,20 @@ struct InternalBuffers
                                         *buffer_index,
                                         compare,
                                         length - count);
-                    Range<RandomAccessIterator> right(
-                        pull_itrs[pull_index].from, buffer_index - 1);
-                    std::rotate(
-                        right.start, right.start + count, right.end);
-                    pull_itrs[pull_index].from = buffer_index - count - 1;
+                    ranges::subrange right(pull_itrs[pull_index].from,
+                                           buffer_index - 1);
+                    ranges::rotate(right,
+                                   ranges::begin(right) +
+                                       difference_type(count));
+                    pull_itrs[pull_index].from =
+                        buffer_index - difference_type(count) - 1;
                 }
             }
         }
 
         // adjust block_size and buffer_size based on the values we
         // were able to pull out
-        buffer_size = buffer1.length();
+        buffer_size = difference_type(ranges::size(buffer1));
         block_size = chunk_length / buffer_size + 1;
 
         // the first buffer NEEDS to be large enough to tag each of the
@@ -719,10 +784,10 @@ struct InternalBuffers
     {
         // remove any parts of A or B that are being used by the
         // internal buffers
-        RandomAccessIterator start = subrangeA.start;
-        if (start == pull_itrs[0].range.start) {
+        RandomAccessIterator start = ranges::begin(subrangeA);
+        if (start == ranges::begin(pull_itrs[0].range)) {
             if (pull_itrs[0].from > pull_itrs[0].to) {
-                subrangeA.start += pull_itrs[0].count;
+                subrangeA = adjust_begin(subrangeA, pull_itrs[0].count);
 
                 // if the internal buffer takes up the entire A or
                 // B subarray, then there's nothing to merge this
@@ -730,27 +795,29 @@ struct InternalBuffers
                 // 2, 2 * (2 internal buffers) = 4, which also only
                 // happens when ranges::size(cache) is small or 0
                 // since it'd otherwise use MergeExternal
-                if (subrangeA.length() == 0) {
+                if (difference_type(ranges::size(subrangeA)) == 0) {
                     return true;
                 }
             }
             else if (pull_itrs[0].from < pull_itrs[0].to) {
-                subrangeB.end -= pull_itrs[0].count;
-                if (subrangeB.length() == 0) {
+                subrangeB = adjust_end(
+                    subrangeB, -difference_type(pull_itrs[0].count));
+                if (difference_type(ranges::size(subrangeB)) == 0) {
                     return true;
                 }
             }
         }
-        if (start == pull_itrs[1].range.start) {
+        if (start == ranges::begin(pull_itrs[1].range)) {
             if (pull_itrs[1].from > pull_itrs[1].to) {
-                subrangeA.start += pull_itrs[1].count;
-                if (subrangeA.length() == 0) {
+                subrangeA = adjust_begin(subrangeA, pull_itrs[1].count);
+                if (difference_type(ranges::size(subrangeA)) == 0) {
                     return true;
                 }
             }
             else if (pull_itrs[1].from < pull_itrs[1].to) {
-                subrangeB.end -= pull_itrs[1].count;
-                if (subrangeB.length() == 0) {
+                subrangeB = adjust_end(
+                    subrangeB, -difference_type(pull_itrs[1].count));
+                if (difference_type(ranges::size(subrangeB)) == 0) {
                     return true;
                 }
             }
@@ -761,7 +828,9 @@ struct InternalBuffers
 };
 
 template <ranges::random_access_range RandomAccessRange>
-InternalBuffers(RandomAccessRange&, size_t, size_t)
+InternalBuffers(RandomAccessRange&,
+                ranges::range_difference_t<RandomAccessRange>,
+                size_t)
     -> InternalBuffers<ranges::iterator_t<RandomAccessRange>>;
 
 template <class T>
@@ -804,8 +873,9 @@ constexpr auto make_cache(std::size_t range_size,
 template <class RNG, class CMP = std::less<>>
 constexpr auto sort_4(RNG& rng, CMP const& compare = {})
 {
+    using difference_type = ranges::range_difference_t<RNG>;
     using std::swap;
-    if (ranges::size(rng) == 3) {
+    if (difference_type(ranges::size(rng)) == 3) {
         // hard-coded insertion sort
         if (compare(rng[1], rng[0])) {
             swap(rng[0], rng[1]);
@@ -817,7 +887,7 @@ constexpr auto sort_4(RNG& rng, CMP const& compare = {})
             }
         }
     }
-    else if (ranges::size(rng) == 2) {
+    else if (difference_type(ranges::size(rng)) == 2) {
         // swap the items if they're out of order
         if (compare(rng[1], rng[0])) {
             swap(rng[0], rng[1]);
@@ -827,6 +897,9 @@ constexpr auto sort_4(RNG& rng, CMP const& compare = {})
 
 constexpr auto initial_sort(auto& rng, auto& iterator, auto const& compare)
 {
+    using difference_type =
+        ranges::range_difference_t<std::remove_cvref_t<decltype(rng)>>;
+
     while (!iterator.finished()) {
         std::array<size_t, 8> order = {0, 1, 2, 3, 4, 5, 6, 7};
 
@@ -834,15 +907,19 @@ constexpr auto initial_sort(auto& rng, auto& iterator, auto const& compare)
 
         auto do_swap = [&](size_t x, size_t y) {
             using std::swap;
-            if (compare(next_range.start[y], next_range.start[x]) ||
+            ASSUME(x < 8 && y < 8 && x >= 0 && y >= 0);
+            if (compare(next_range[difference_type(y)],
+                        next_range[difference_type(x)]) ||
                 (order.at(x) > order.at(y) &&
-                 !compare(next_range.start[x], next_range.start[y]))) {
-                std::iter_swap(next_range.start + x, next_range.start + y);
+                 !compare(next_range[difference_type(x)],
+                          next_range[difference_type(y)]))) {
+                swap(next_range[difference_type(x)],
+                     next_range[difference_type(y)]);
                 swap(order.at(x), order.at(y));
             }
         };
 
-        if (next_range.length() == 8) {
+        if (ranges::size(next_range) == 8) {
             do_swap(0, 1);
             do_swap(2, 3);
             do_swap(4, 5);
@@ -863,7 +940,7 @@ constexpr auto initial_sort(auto& rng, auto& iterator, auto const& compare)
             do_swap(3, 5);
             do_swap(3, 4);
         }
-        else if (next_range.length() == 7) {
+        else if (ranges::size(next_range) == 7) {
             do_swap(1, 2);
             do_swap(3, 4);
             do_swap(5, 6);
@@ -881,7 +958,7 @@ constexpr auto initial_sort(auto& rng, auto& iterator, auto const& compare)
             do_swap(2, 4);
             do_swap(2, 3);
         }
-        else if (next_range.length() == 6) {
+        else if (ranges::size(next_range) == 6) {
             do_swap(1, 2);
             do_swap(4, 5);
             do_swap(0, 2);
@@ -895,7 +972,7 @@ constexpr auto initial_sort(auto& rng, auto& iterator, auto const& compare)
             do_swap(1, 3);
             do_swap(2, 3);
         }
-        else if (next_range.length() == 5) {
+        else if (ranges::size(next_range) == 5) {
             do_swap(0, 1);
             do_swap(3, 4);
             do_swap(2, 4);
@@ -906,7 +983,7 @@ constexpr auto initial_sort(auto& rng, auto& iterator, auto const& compare)
             do_swap(1, 3);
             do_swap(1, 2);
         }
-        else if (next_range.length() == 4) {
+        else if (ranges::size(next_range) == 4) {
             do_swap(0, 1);
             do_swap(2, 3);
             do_swap(0, 2);
@@ -923,14 +1000,14 @@ constexpr auto block_sort_cache(auto&& iterator,
                                 auto&& compare)
 {
     using RangeType = std::remove_cvref_t<decltype(range)>;
-    using RandomAccessIterator = ranges::iterator_t<RangeType>;
-    using diff_t = ranges::range_difference_t<RangeType>;
+    using difference_type = ranges::range_difference_t<RangeType>;
 
     // if four subarrays fit into the cache, it's faster to merge
     // both pairs of subarrays into the cache, then merge the two
     // merged subarrays from the cache back into the original array
-    if ((iterator.length() + 1) * 4 <= ranges::size(cache) &&
-        iterator.length() * 4 <= ranges::size(range)) {
+    if ((iterator.length() + 1) * 4 <=
+            difference_type(ranges::size(cache)) &&
+        iterator.length() * 4 <= difference_type(ranges::size(range))) {
         iterator.begin();
         while (!iterator.finished()) {
             // merge A1 and B1 into the cache
@@ -939,109 +1016,118 @@ constexpr auto block_sort_cache(auto&& iterator,
             auto subrangeA2 = iterator.nextRange(range);
             auto subrangeB2 = iterator.nextRange(range);
 
-            if (compare(*(subrangeB1.end - 1), *subrangeA1.start)) {
+            if (compare(*(ranges::end(subrangeB1) - 1),
+                        *ranges::begin(subrangeA1))) {
                 // the two ranges are in reverse order, so copy
                 // them in reverse order into the cache
-                ranges::copy(subrangeA1.start,
-                             subrangeA1.end,
-                             ranges::begin(cache) +
-                                 diff_t(subrangeB1.length()));
-                ranges::copy(subrangeB1.start,
-                             subrangeB1.end,
-                             ranges::begin(cache));
+                ranges::copy(subrangeB1, ranges::begin(cache));
+                ranges::copy(
+                    subrangeA1,
+                    ranges::begin(cache) +
+                        difference_type(ranges::size(subrangeB1)));
             }
-            else if (compare(*subrangeB1.start, *(subrangeA1.end - 1))) {
+            else if (compare(*ranges::begin(subrangeB1),
+                             *(ranges::end(subrangeA1) - 1))) {
                 // these two ranges weren't already in order, so
                 // merge them into the cache
-                std::merge(subrangeA1.start,
-                           subrangeA1.end,
-                           subrangeB1.start,
-                           subrangeB1.end,
-                           ranges::begin(cache),
-                           compare);
+                ranges::merge(
+                    subrangeA1, subrangeB1, ranges::begin(cache), compare);
             }
             else {
                 // if A1, B1, A2, and B2 are all in order, skip
                 // doing anything else
-                if (!compare(*subrangeB2.start, *(subrangeA2.end - 1)) &&
-                    !compare(*subrangeA2.start, *(subrangeB1.end - 1))) {
+                if (!compare(*ranges::begin(subrangeB2),
+                             *(ranges::end(subrangeA2) - 1)) &&
+                    !compare(*ranges::begin(subrangeA2),
+                             *(ranges::end(subrangeB1) - 1))) {
                     continue;
                 }
 
                 // copy A1 and B1 into the cache in the same order
                 // at once
-                ranges::copy(subrangeA1.start,
-                             subrangeB1.end,
+                ranges::copy(ranges::begin(subrangeA1),
+                             ranges::end(subrangeB1),
                              ranges::begin(cache));
             }
-            subrangeA1 = Range<RandomAccessIterator>(subrangeA1.start,
-                                                     subrangeB1.end);
+            subrangeA1 = ranges::subrange(ranges::begin(subrangeA1),
+                                          ranges::end(subrangeB1));
 
             // merge A2 and B2 into the cache
-            if (compare(*(subrangeB2.end - 1), *subrangeA2.start)) {
+            if (compare(*(ranges::end(subrangeB2) - 1),
+                        *ranges::begin(subrangeA2))) {
                 // the two ranges are in reverse order, so copy
                 // them in reverse order into the cache
-                ranges::copy(subrangeA2.start,
-                             subrangeA2.end,
-                             ranges::begin(cache) + subrangeA1.length() +
-                                 subrangeB2.length());
-                ranges::copy(subrangeB2.start,
-                             subrangeB2.end,
-                             ranges::begin(cache) + subrangeA1.length());
+                ranges::copy(
+                    subrangeA2,
+                    ranges::begin(cache) +
+                        difference_type(ranges::size(subrangeA1) +
+                                        ranges::size(subrangeB2)));
+                ranges::copy(
+                    subrangeB2,
+                    ranges::begin(cache) +
+                        difference_type(ranges::size(subrangeA1)));
             }
-            else if (compare(*subrangeB2.start, *(subrangeA2.end - 1))) {
+            else if (compare(*ranges::begin(subrangeB2),
+                             *(ranges::end(subrangeA2) - 1))) {
                 // these two ranges weren't already in order, so
                 // merge them into the cache
-                std::merge(subrangeA2.start,
-                           subrangeA2.end,
-                           subrangeB2.start,
-                           subrangeB2.end,
-                           ranges::begin(cache) + subrangeA1.length(),
-                           compare);
+                ranges::merge(
+                    subrangeA2,
+                    subrangeB2,
+                    ranges::begin(cache) +
+                        difference_type(ranges::size(subrangeA1)),
+                    compare);
             }
             else {
                 // copy A2 and B2 into the cache in the same order
                 // at once
-                ranges::copy(subrangeA2.start,
-                             subrangeB2.end,
-                             ranges::begin(cache) + subrangeA1.length());
+                ranges::copy(
+                    ranges::begin(subrangeA2),
+                    ranges::end(subrangeB2),
+                    ranges::begin(cache) +
+                        difference_type(ranges::size(subrangeA1)));
             }
-            subrangeA2 = Range<RandomAccessIterator>(subrangeA2.start,
-                                                     subrangeB2.end);
+            subrangeA2 = ranges::subrange(ranges::begin(subrangeA2),
+                                          ranges::end(subrangeB2));
 
             // merge A1 and A2 from the cache into the array
-            auto subrangeA3 =
-                Range(ranges::begin(cache),
-                      ranges::begin(cache) + subrangeA1.length());
-            auto subrangeB3 =
-                Range(ranges::begin(cache) + subrangeA1.length(),
-                      ranges::begin(cache) + subrangeA1.length() +
-                          subrangeA2.length());
+            auto subrangeA3 = ranges::subrange(
+                ranges::begin(cache),
+                ranges::begin(cache) +
+                    difference_type(ranges::size(subrangeA1)));
 
-            if (compare(*(subrangeB3.end - 1), *subrangeA3.start)) {
+            auto subrangeB3 = ranges::subrange(
+                ranges::begin(cache) +
+                    difference_type(ranges::size(subrangeA1)),
+                ranges::begin(cache) +
+                    difference_type(ranges::size(subrangeA1)) +
+                    difference_type(ranges::size(subrangeA2)));
+
+            if (compare(*(ranges::end(subrangeB3) - 1),
+                        *ranges::begin(subrangeA3))) {
                 // the two ranges are in reverse order, so copy
                 // them in reverse order into the array
-                ranges::copy(subrangeA3.start,
-                             subrangeA3.end,
-                             subrangeA1.start + subrangeA2.length());
                 ranges::copy(
-                    subrangeB3.start, subrangeB3.end, subrangeA1.start);
+                    subrangeA3,
+                    ranges::begin(subrangeA1) +
+                        difference_type(ranges::size(subrangeA2)));
+                ranges::copy(subrangeB3, ranges::begin(subrangeA1));
             }
-            else if (compare(*subrangeB3.start, *(subrangeA3.end - 1))) {
+            else if (compare(*ranges::begin(subrangeB3),
+                             *(ranges::end(subrangeA3) - 1))) {
                 // these two ranges weren't already in order, so
                 // merge them back into the array
-                std::merge(subrangeA3.start,
-                           subrangeA3.end,
-                           subrangeB3.start,
-                           subrangeB3.end,
-                           subrangeA1.start,
-                           compare);
+                ranges::merge(subrangeA3,
+                              subrangeB3,
+                              ranges::begin(subrangeA1),
+                              compare);
             }
             else {
                 // copy A3 and B3 into the array in the same order
                 // at once
-                ranges::copy(
-                    subrangeA3.start, subrangeB3.end, subrangeA1.start);
+                ranges::copy(ranges::begin(subrangeA3),
+                             ranges::end(subrangeB3),
+                             ranges::begin(subrangeA1));
             }
         }
 
@@ -1056,20 +1142,23 @@ constexpr auto block_sort_cache(auto&& iterator,
             auto subrangeA = iterator.nextRange(range);
             auto subrangeB = iterator.nextRange(range);
 
-            if (compare(*(subrangeB.end - 1), *subrangeA.start)) {
+            if (compare(*(ranges::end(subrangeB) - 1),
+                        *ranges::begin(subrangeA))) {
                 // the two ranges are in reverse order, so a simple
                 // rotation should fix it
-                std::rotate(subrangeA.start, subrangeA.end, subrangeB.end);
+                std::rotate(ranges::begin(subrangeA),
+                            ranges::end(subrangeA),
+                            ranges::end(subrangeB));
             }
-            else if (compare(*subrangeB.start, *(subrangeA.end - 1))) {
+            else if (compare(*ranges::begin(subrangeB),
+                             *(ranges::end(subrangeA) - 1))) {
                 // these two ranges weren't already in order, so
                 // we'll need to merge them!
-                ranges::copy(
-                    subrangeA.start, subrangeA.end, ranges::begin(cache));
-                MergeExternal(subrangeA.start,
-                              subrangeA.end,
-                              subrangeB.start,
-                              subrangeB.end,
+                ranges::copy(subrangeA, ranges::begin(cache));
+                MergeExternal(ranges::begin(subrangeA),
+                              ranges::end(subrangeA),
+                              ranges::begin(subrangeB),
+                              ranges::end(subrangeB),
                               ranges::begin(cache),
                               compare);
             }
@@ -1082,8 +1171,6 @@ constexpr auto block_sort_internal(auto&& iterator,
                                    auto&& range,
                                    auto&& compare)
 {
-    using RandomAccessIterator =
-        ranges::iterator_t<std::remove_cvref_t<decltype(range)>>;
     // this is where the in-place merge logic starts!
     // 1. pull out two internal buffers each containing √A unique
     // values
@@ -1120,6 +1207,11 @@ constexpr auto block_sort_internal(auto&& iterator,
     // replaced by a different merge algorithm (MergeInPlace)
 
     iterator.begin();
+
+    using difference_type =
+        ranges::range_difference_t<std::remove_cvref_t<decltype(range)>>;
+
+    // TODO: combine with buffers.initialize_buffers()
     while (!iterator.finished()) {
         auto subrangeA = iterator.nextRange(range);
         auto subrangeB = iterator.nextRange(range);
@@ -1144,58 +1236,66 @@ constexpr auto block_sort_internal(auto&& iterator,
             continue;
         }
 
-        if (compare(*(subrangeB.end - 1), *subrangeA.start)) {
+        if (compare(*(ranges::end(subrangeB) - 1),
+                    *ranges::begin(subrangeA))) {
             // the two ranges are in reverse order, so a simple
             // rotation should fix it
-            std::rotate(subrangeA.start, subrangeA.end, subrangeB.end);
+            std::rotate(ranges::begin(subrangeA),
+                        ranges::end(subrangeA),
+                        ranges::end(subrangeB));
         }
-        else if (compare(*subrangeA.end, *(subrangeA.end - 1))) {
+        else if (compare(*ranges::end(subrangeA),
+                         *(ranges::end(subrangeA) - 1))) {
             // these two ranges weren't already in order, so we'll
             // need to merge them!
 
             // break the remainder of A into blocks. firstA is the
             // uneven-sized first A block
-            Range<RandomAccessIterator> blockA(subrangeA);
-            Range<RandomAccessIterator> firstA(
-                subrangeA.start,
-                subrangeA.start + blockA.length() % buffers.block_size);
+            ranges::subrange blockA(subrangeA);
+            ranges::subrange firstA(
+                ranges::begin(subrangeA),
+                ranges::begin(subrangeA) +
+                    difference_type(ranges::size(blockA) %
+                                    buffers.block_size));
 
             // swap the first value of each A block with the values
             // in buffer1
-            for (RandomAccessIterator indexA = buffers.buffer1.start,
-                                      index = firstA.end;
-                 index < blockA.end;
+            for (auto indexA = ranges::begin(buffers.buffer1),
+                      index = ranges::end(firstA);
+                 index < ranges::end(blockA);
                  ++indexA, index += buffers.block_size) {
-                std::iter_swap(indexA, index);
+                ranges::iter_swap(indexA, index);
             }
 
             // start rolling the A blocks through the B blocks!
             // when we leave an A block behind we'll need to merge
             // the previous A block with any B blocks that follow
             // it, so track that information as well
-            Range<RandomAccessIterator> lastA(firstA);
-            Range<RandomAccessIterator> lastB(ranges::begin(range),
-                                              ranges::begin(range));
-            Range<RandomAccessIterator> blockB(
-                subrangeB.start,
-                subrangeB.start +
-                    std::min(buffers.block_size, subrangeB.length()));
-            blockA.start += firstA.length();
-            RandomAccessIterator indexA = buffers.buffer1.start;
+            ranges::subrange lastA{firstA};
+            ranges::subrange lastB{ranges::begin(range),
+                                   ranges::begin(range)};
+            ranges::subrange blockB{
+                ranges::begin(subrangeB),
+                ranges::begin(subrangeB) +
+                    std::min(buffers.block_size,
+                             difference_type(ranges::size(subrangeB)))};
+
+            blockA = adjust_begin(blockA, ranges::size(firstA));
+
+            auto indexA = ranges::begin(buffers.buffer1);
 
             // if the first unevenly sized A block fits into the
             // cache, copy it there for when we go to Merge it
             // otherwise, if the second buffer is available, block
             // swap the contents into that
-            if (lastA.length() <= ranges::size(cache)) {
-                ranges::copy(lastA.start, lastA.end, ranges::begin(cache));
+            if (ranges::size(lastA) <= ranges::size(cache)) {
+                ranges::copy(lastA, ranges::begin(cache));
             }
-            else if (buffers.buffer2.length() > 0) {
-                std::swap_ranges(
-                    lastA.start, lastA.end, buffers.buffer2.start);
+            else if (ranges::size(buffers.buffer2) > 0) {
+                ranges::swap_ranges(lastA, buffers.buffer2);
             }
 
-            if (blockA.length() > 0) {
+            if (ranges::size(blockA) > 0) {
                 while (true) {
                     // if there's a previous B block and the first
                     // value of the minimum A block is <= the last
@@ -1203,35 +1303,35 @@ constexpr auto block_sort_internal(auto&& iterator,
                     // that minimum A block behind. or if there are
                     // no B blocks left then keep dropping the
                     // remaining A blocks.
-                    if ((lastB.length() > 0 &&
-                         !compare(*(lastB.end - 1), *indexA)) ||
-                        blockB.length() == 0) {
+                    if ((ranges::size(lastB) > 0 &&
+                         !compare(*(ranges::end(lastB) - 1), *indexA)) ||
+                        ranges::size(blockB) == 0) {
                         // figure out where to split the previous B
                         // block, and rotate it at the split
-                        RandomAccessIterator B_split = std::lower_bound(
-                            lastB.start, lastB.end, *indexA, compare);
-                        std::size_t B_remaining =
-                            std::distance(B_split, lastB.end);
+                        auto B_split =
+                            ranges::lower_bound(lastB, *indexA, compare);
+                        auto B_remaining =
+                            std::distance(B_split, ranges::end(lastB));
 
                         // swap the minimum A block to the
                         // beginning of the rolling A blocks
-                        RandomAccessIterator minA = blockA.start;
-                        for (RandomAccessIterator findA =
-                                 minA + buffers.block_size;
-                             findA < blockA.end;
+                        auto minA = ranges::begin(blockA);
+                        for (auto findA = minA + buffers.block_size;
+                             findA < ranges::end(blockA);
                              findA += buffers.block_size) {
                             if (compare(*findA, *minA)) {
                                 minA = findA;
                             }
                         }
-                        std::swap_ranges(blockA.start,
-                                         blockA.start + buffers.block_size,
-                                         minA);
+                        ranges::swap_ranges(ranges::begin(blockA),
+                                            ranges::begin(blockA) +
+                                                buffers.block_size,
+                                            minA);
 
                         // swap the first item of the previous A
                         // block back with its original value,
                         // which is stored in buffer1
-                        std::iter_swap(blockA.start, indexA);
+                        ranges::iter_swap(ranges::begin(blockA), indexA);
                         ++indexA;
 
                         // locally merge the previous A block with
@@ -1242,48 +1342,50 @@ constexpr auto block_sort_internal(auto&& iterator,
                         // that (with MergeInternal), or failing
                         // that we'll use a strictly in-place merge
                         // algorithm (MergeInPlace)
-                        if (lastA.length() <= ranges::size(cache)) {
-                            MergeExternal(lastA.start,
-                                          lastA.end,
-                                          lastA.end,
+                        if (ranges::size(lastA) <= ranges::size(cache)) {
+                            MergeExternal(ranges::begin(lastA),
+                                          ranges::end(lastA),
+                                          ranges::end(lastA),
                                           B_split,
                                           ranges::begin(cache),
                                           compare);
                         }
-                        else if (buffers.buffer2.length() > 0) {
-                            MergeInternal(lastA.start,
-                                          lastA.end,
-                                          lastA.end,
+                        else if (ranges::size(buffers.buffer2) > 0) {
+                            MergeInternal(ranges::begin(lastA),
+                                          ranges::end(lastA),
+                                          ranges::end(lastA),
                                           B_split,
-                                          buffers.buffer2.start,
+                                          ranges::begin(buffers.buffer2),
                                           compare);
                         }
                         else {
-                            MergeInPlace(lastA.start,
-                                         lastA.end,
-                                         lastA.end,
+                            MergeInPlace(ranges::begin(lastA),
+                                         ranges::end(lastA),
+                                         ranges::end(lastA),
                                          B_split,
                                          compare);
                         }
 
-                        if (buffers.buffer2.length() > 0 ||
-                            buffers.block_size <= ranges::size(cache)) {
+                        if (ranges::size(buffers.buffer2) > 0 ||
+                            buffers.block_size <=
+                                difference_type(ranges::size(cache))) {
                             // copy the previous A block into the
                             // cache or buffer2, since that's where
                             // we need it to be when we go to merge
                             // it anyway
                             if (buffers.block_size <=
                                 ranges::size(cache)) {
-                                ranges::copy(blockA.start,
-                                             blockA.start +
+                                ranges::copy(ranges::begin(blockA),
+                                             ranges::begin(blockA) +
                                                  buffers.block_size,
                                              ranges::begin(cache));
                             }
                             else {
-                                std::swap_ranges(blockA.start,
-                                                 blockA.start +
-                                                     buffers.block_size,
-                                                 buffers.buffer2.start);
+                                std::swap_ranges(
+                                    ranges::begin(blockA),
+                                    ranges::begin(blockA) +
+                                        buffers.block_size,
+                                    ranges::begin(buffers.buffer2));
                             }
 
                             // this is equivalent to rotating, but
@@ -1297,7 +1399,7 @@ constexpr auto block_sort_internal(auto&& iterator,
                             // where it belongs
                             std::swap_ranges(B_split,
                                              B_split + B_remaining,
-                                             blockA.start +
+                                             ranges::begin(blockA) +
                                                  buffers.block_size -
                                                  B_remaining);
                         }
@@ -1307,87 +1409,98 @@ constexpr auto block_sort_internal(auto&& iterator,
                             // operation since buffer2 doesn't
                             // exist, so perform a normal rotation
                             std::rotate(B_split,
-                                        blockA.start,
-                                        blockA.start + buffers.block_size);
+                                        ranges::begin(blockA),
+                                        ranges::begin(blockA) +
+                                            buffers.block_size);
                         }
 
                         // update the range for the remaining A
                         // blocks, and the range remaining from the
                         // B block after it was split
-                        lastA = Range<RandomAccessIterator>(
-                            blockA.start - B_remaining,
-                            blockA.start - B_remaining +
+                        lastA = ranges::subrange(
+                            ranges::begin(blockA) - B_remaining,
+                            ranges::begin(blockA) - B_remaining +
                                 buffers.block_size);
-                        lastB = Range<RandomAccessIterator>(
-                            lastA.end, lastA.end + B_remaining);
+                        lastB = ranges::subrange(ranges::end(lastA),
+                                                 ranges::end(lastA) +
+                                                     B_remaining);
 
                         // if there are no more A blocks remaining,
                         // this step is finished!
-                        blockA.start += buffers.block_size;
-                        if (blockA.length() == 0) {
+                        blockA = adjust_begin(blockA, buffers.block_size);
+                        if (ranges::size(blockA) == 0) {
                             break;
                         }
                     }
-                    else if (blockB.length() < buffers.block_size) {
+                    else if (difference_type(ranges::size(blockB)) <
+                             buffers.block_size) {
                         // move the last B block, which is unevenly
                         // sized, to before the remaining A blocks,
                         // by using a rotation
-                        std::rotate(
-                            blockA.start, blockB.start, blockB.end);
+                        ranges::rotate(ranges::begin(blockA),
+                                       ranges::begin(blockB),
+                                       ranges::end(blockB));
 
-                        lastB = Range<RandomAccessIterator>(
-                            blockA.start, blockA.start + blockB.length());
-                        blockA.start += blockB.length();
-                        blockA.end += blockB.length();
-                        blockB.end = blockB.start;
+                        lastB = ranges::subrange(ranges::begin(blockA),
+                                                 ranges::begin(blockA) +
+                                                     ranges::size(blockB));
+                        blockA = shift_range(blockA, ranges::size(blockB));
+                        blockB = adjust_end(
+                            blockB,
+                            -difference_type(ranges::size(blockB)));
                     }
                     else {
                         // roll the leftmost A block to the end by
                         // swapping it with the next B block
-                        std::swap_ranges(blockA.start,
-                                         blockA.start + buffers.block_size,
-                                         blockB.start);
-                        lastB = Range<RandomAccessIterator>(
-                            blockA.start,
-                            blockA.start + buffers.block_size);
+                        std::swap_ranges(ranges::begin(blockA),
+                                         ranges::begin(blockA) +
+                                             buffers.block_size,
+                                         ranges::begin(blockB));
+                        lastB = ranges::subrange(ranges::begin(blockA),
+                                                 ranges::begin(blockA) +
+                                                     buffers.block_size);
 
-                        blockA.start += buffers.block_size;
-                        blockA.end += buffers.block_size;
-                        blockB.start += buffers.block_size;
+                        blockA = ranges::subrange(
+                            ranges::begin(blockA) + buffers.block_size,
+                            ranges::end(blockA) + buffers.block_size);
+                        blockB = adjust_begin(blockB, buffers.block_size);
 
-                        if (blockB.end >
-                            subrangeB.end - buffers.block_size) {
-                            blockB.end = subrangeB.end;
+                        if (ranges::end(blockB) >
+                            ranges::end(subrangeB) - buffers.block_size) {
+                            blockB =
+                                ranges::subrange(ranges::begin(blockB),
+                                                 ranges::end(subrangeB));
                         }
                         else {
-                            blockB.end += buffers.block_size;
+                            blockB =
+                                adjust_end(blockB, buffers.block_size);
                         }
                     }
                 }
             }
 
             // merge the last A block with the remaining B values
-            if (lastA.length() <= ranges::size(cache)) {
-                MergeExternal(lastA.start,
-                              lastA.end,
-                              lastA.end,
-                              subrangeB.end,
+            if (ranges::size(lastA) <= ranges::size(cache)) {
+                MergeExternal(ranges::begin(lastA),
+                              ranges::end(lastA),
+                              ranges::end(lastA),
+                              ranges::end(subrangeB),
                               ranges::begin(cache),
                               compare);
             }
-            else if (buffers.buffer2.length() > 0) {
-                MergeInternal(lastA.start,
-                              lastA.end,
-                              lastA.end,
-                              subrangeB.end,
-                              buffers.buffer2.start,
+            else if (ranges::size(buffers.buffer2) > 0) {
+                MergeInternal(ranges::begin(lastA),
+                              ranges::end(lastA),
+                              ranges::end(lastA),
+                              ranges::end(subrangeB),
+                              ranges::begin(buffers.buffer2),
                               compare);
             }
             else {
-                MergeInPlace(lastA.start,
-                             lastA.end,
-                             lastA.end,
-                             subrangeB.end,
+                MergeInPlace(ranges::begin(lastA),
+                             ranges::end(lastA),
+                             ranges::end(lastA),
+                             ranges::end(subrangeB),
                              compare);
             }
         }
@@ -1404,7 +1517,9 @@ constexpr auto block_sort_internal(auto&& iterator,
     // simple insertion sort, even for tens of millions of items.
     // this may be because insertion sort is quite fast when the
     // data is already somewhat sorted, like it is here
-    InsertionSort(buffers.buffer2.start, buffers.buffer2.end, compare);
+    InsertionSort(ranges::begin(buffers.buffer2),
+                  ranges::end(buffers.buffer2),
+                  compare);
 
     for (buffers.pull_index = 0; buffers.pull_index < 2;
          ++buffers.pull_index) {
@@ -1414,22 +1529,27 @@ constexpr auto block_sort_internal(auto&& iterator,
             buffers.pull_itrs[buffers.pull_index].to) {
             // the values were pulled out to the left, so
             // redistribute them back to the right
-            Range<RandomAccessIterator> buffer(
-                buffers.pull_itrs[buffers.pull_index].range.start,
-                buffers.pull_itrs[buffers.pull_index].range.start +
+            ranges::subrange buffer(
+                ranges::begin(buffers.pull_itrs[buffers.pull_index].range),
+                ranges::begin(
+                    buffers.pull_itrs[buffers.pull_index].range) +
                     buffers.pull_itrs[buffers.pull_index].count);
-            while (buffer.length() > 0) {
+            while (ranges::size(buffer) > 0) {
                 buffers.buffer_index = FindFirstForward(
-                    buffer.end,
-                    buffers.pull_itrs[buffers.pull_index].range.end,
-                    *buffer.start,
+                    ranges::end(buffer),
+                    ranges::end(
+                        buffers.pull_itrs[buffers.pull_index].range),
+                    *ranges::begin(buffer),
                     compare,
                     unique);
-                std::size_t amount = buffers.buffer_index - buffer.end;
-                std::rotate(
-                    buffer.start, buffer.end, buffers.buffer_index);
-                buffer.start += (amount + 1);
-                buffer.end += amount;
+                difference_type amount =
+                    buffers.buffer_index - ranges::end(buffer);
+                std::rotate(ranges::begin(buffer),
+                            ranges::end(buffer),
+                            buffers.buffer_index);
+                buffer =
+                    ranges::subrange(ranges::begin(buffer) + (amount + 1),
+                                     ranges::end(buffer) + amount);
                 unique -= 2;
             }
         }
@@ -1437,23 +1557,26 @@ constexpr auto block_sort_internal(auto&& iterator,
                  buffers.pull_itrs[buffers.pull_index].to) {
             // the values were pulled out to the right, so
             // redistribute them back to the left
-            Range<RandomAccessIterator> buffer(
-                buffers.pull_itrs[buffers.pull_index].range.end -
+            ranges::subrange buffer(
+                ranges::end(buffers.pull_itrs[buffers.pull_index].range) -
                     buffers.pull_itrs[buffers.pull_index].count,
-                buffers.pull_itrs[buffers.pull_index].range.end);
-            while (buffer.length() > 0) {
+                ranges::end(buffers.pull_itrs[buffers.pull_index].range));
+            while (ranges::size(buffer) > 0) {
                 buffers.buffer_index = FindLastBackward(
-                    buffers.pull_itrs[buffers.pull_index].range.start,
-                    buffer.start,
-                    *(buffer.end - 1),
+                    ranges::begin(
+                        buffers.pull_itrs[buffers.pull_index].range),
+                    ranges::begin(buffer),
+                    *(ranges::end(buffer) - 1),
                     compare,
                     unique);
-                std::size_t amount = buffer.start - buffers.buffer_index;
+                difference_type amount =
+                    ranges::begin(buffer) - buffers.buffer_index;
                 std::rotate(buffers.buffer_index,
                             buffers.buffer_index + amount,
-                            buffer.end);
-                buffer.start -= amount;
-                buffer.end -= (amount + 1);
+                            ranges::end(buffer));
+                buffer =
+                    ranges::subrange(ranges::begin(buffer) - amount,
+                                     ranges::end(buffer) - (amount + 1));
                 unique -= 2;
             }
         }
@@ -1474,6 +1597,7 @@ constexpr auto block_sort(RANGE range,
     // now...)
 
     using T = ranges::range_value_t<RANGE>;
+    using difference_type = ranges::range_difference_t<RANGE>;
 
     // if the array is of size 0, 1, 2, or 3, just sort them like so:
     if (ranges::size(range) < 4) {
@@ -1484,7 +1608,7 @@ constexpr auto block_sort(RANGE range,
     // sort groups of 4-8 items at a time using an unstable sorting
     // network, but keep track of the original item orders to force it to
     // be stable http://pages.ripco.net/~jgamble/nw.html
-    Iterator iterator(ranges::size(range), 4);
+    Iterator<RANGE> iterator(difference_type(ranges::size(range)), 4);
 
     initial_sort(range, iterator, compare);
     if (ranges::size(range) < 8) {
@@ -1501,7 +1625,7 @@ constexpr auto block_sort(RANGE range,
         // branch specifically for merging with the cache (we use < rather
         // than <= since the block size might be one more than
         // iterator.length())
-        if (iterator.length() < ranges::size(cache)) {
+        if (iterator.length() < difference_type(ranges::size(cache))) {
             block_sort_cache(iterator, cache, range, compare);
         }
         else {
@@ -1545,7 +1669,7 @@ constexpr struct
 {
     static constexpr auto operator()(
         auto const& compare,
-        std::optional<size_t> const& cache_size = std::nullopt)
+        std::optional<std::size_t> const& cache_size = std::nullopt)
     {
         return _block_sort::block_sort_adapter{
             std::forward<decltype(compare)>(compare), cache_size};
