@@ -467,11 +467,12 @@ struct InternalBuffers
     bool find_separately = false;
 
     constexpr explicit InternalBuffers(
+        auto&& iterator,
         ranges::random_access_range auto&& range,
-        difference_type length,
-        std::size_t cache_size)
-        : block_size{difference_type(std::sqrt(length))}
-        , buffer_size{difference_type(length) / block_size + 1}
+        auto&& cache,
+        auto&& compare)
+        : block_size{difference_type(std::sqrt(iterator.length()))}
+        , buffer_size{difference_type(iterator.length()) / block_size + 1}
         , find{buffer_size + buffer_size}
         , buffer1{range}
         , buffer2{range}
@@ -480,17 +481,91 @@ struct InternalBuffers
         // find two internal buffers of size 'buffer_size' each
         // let's try finding both buffers at the same time from a
         // single A or B subarray
-        if (block_size <= difference_type(cache_size)) {
+        if (block_size <= difference_type(ranges::size(cache))) {
             // if every A block fits into the cache then we won't need
             // the second internal buffer, so we really only need to
             // find 'buffer_size' unique values
             find = buffer_size;
         }
-        else if (find > difference_type(length)) {
+        else if (find > difference_type(iterator.length())) {
             // we can't fit both buffers into the same A or B subarray,
             // so find two buffers separately
             find = buffer_size;
             find_separately = true;
+        }
+
+        initialize(iterator, range, cache, compare);
+    }
+
+    constexpr void clean_up(auto&& compare)
+    {
+        // when we're finished with this merge step we should have the
+        // one or two internal buffers left over, where the second
+        // buffer is all jumbled up insertion sort the second buffer,
+        // then redistribute the buffers back into the array using the
+        // opposite process used for creating the buffer
+
+        // while an unstable sort like std::sort could be applied here,
+        // in benchmarks it was consistently slightly slower than a
+        // simple insertion sort, even for tens of millions of items.
+        // this may be because insertion sort is quite fast when the
+        // data is already somewhat sorted, like it is here
+        InsertionSort(
+            ranges::begin(buffer2), ranges::end(buffer2), compare);
+
+        for (pull_index = 0; pull_index < 2; ++pull_index) {
+            auto unique = pull_itrs[pull_index].count * 2;
+            if (pull_itrs[pull_index].from > pull_itrs[pull_index].to) {
+                // the values were pulled out to the left, so
+                // redistribute them back to the right
+                ranges::subrange buffer(
+                    ranges::begin(pull_itrs[pull_index].range),
+                    ranges::begin(pull_itrs[pull_index].range) +
+                        pull_itrs[pull_index].count);
+                while (ranges::size(buffer) > 0) {
+                    buffer_index = FindFirstForward(
+                        ranges::end(buffer),
+                        ranges::end(pull_itrs[pull_index].range),
+                        *ranges::begin(buffer),
+                        compare,
+                        unique);
+                    difference_type amount =
+                        buffer_index - ranges::end(buffer);
+                    std::rotate(ranges::begin(buffer),
+                                ranges::end(buffer),
+                                buffer_index);
+                    buffer = ranges::subrange(
+                        ranges::begin(buffer) + (amount + 1),
+                        ranges::end(buffer) + amount);
+                    unique -= 2;
+                }
+            }
+            else if (pull_itrs[pull_index].from <
+                     pull_itrs[pull_index].to) {
+                // the values were pulled out to the right, so
+                // redistribute them back to the left
+                ranges::subrange buffer(
+                    ranges::end(pull_itrs[pull_index].range) -
+                        pull_itrs[pull_index].count,
+                    ranges::end(pull_itrs[pull_index].range));
+                while (ranges::size(buffer) > 0) {
+                    buffer_index = FindLastBackward(
+                        ranges::begin(pull_itrs[pull_index].range),
+                        ranges::begin(buffer),
+                        *(ranges::end(buffer) - 1),
+                        compare,
+                        unique);
+                    difference_type amount =
+                        ranges::begin(buffer) - buffer_index;
+                    std::rotate(buffer_index,
+                                buffer_index + amount,
+                                ranges::end(buffer));
+                    buffer = ranges::subrange(
+                        ranges::begin(buffer) - amount,
+                        ranges::end(buffer) - (amount + 1));
+                    unique -= 2;
+                }
+            }
         }
     }
 
@@ -718,9 +793,31 @@ struct InternalBuffers
         return false;
     }
 
-    constexpr auto initialize_buffers(auto chunk_length,
-                                      auto const& compare)
+    // we need to find either a single contiguous space containing
+    // 2√A unique values (which will be split up into two buffers
+    // of size √A each), or we need to find one buffer of < 2√A
+    // unique values, and a second buffer of √A unique values, OR
+    // if we couldn't find that many unique values, we need the
+    // largest possible buffer we can get
+    // in the case where it couldn't find a single buffer of at
+    // least √A unique values, all of the Merge steps must be
+    // replaced by a different merge algorithm (MergeInPlace)
+    constexpr auto initialize(auto&& iterator,
+                              auto&& range,
+                              auto&& cache,
+                              auto const& compare)
     {
+        iterator.begin();
+        while (!iterator.finished()) {
+            auto subrangeA = iterator.nextRange(range);
+            auto subrangeB = iterator.nextRange(range);
+
+            if (unique(
+                    subrangeA, subrangeB, ranges::size(cache), compare)) {
+                break;
+            }
+        }
+
         // pull out the two ranges so we can use them as internal
         // buffers
         for (pull_index = 0; pull_index < 2; ++pull_index) {
@@ -772,7 +869,7 @@ struct InternalBuffers
         // adjust block_size and buffer_size based on the values we
         // were able to pull out
         buffer_size = difference_type(ranges::size(buffer1));
-        block_size = chunk_length / buffer_size + 1;
+        block_size = iterator.length() / buffer_size + 1;
 
         // the first buffer NEEDS to be large enough to tag each of the
         // evenly sized A blocks, so this was originally here to test
@@ -828,9 +925,7 @@ struct InternalBuffers
 };
 
 template <ranges::random_access_range RandomAccessRange>
-InternalBuffers(RandomAccessRange&,
-                ranges::range_difference_t<RandomAccessRange>,
-                size_t)
+InternalBuffers(auto&&, RandomAccessRange&, auto&&, auto&&)
     -> InternalBuffers<ranges::iterator_t<RandomAccessRange>>;
 
 template <class T>
@@ -1145,11 +1240,234 @@ constexpr auto block_sort_cache(auto&& iterator,
     }
 }
 
+constexpr auto Merge(auto&& a1,
+                     auto&& a2,
+                     auto&& b1,
+                     auto&& b2,
+                     auto&& buffer,
+                     auto&& cache,
+                     auto&& compare)
+{
+
+    using difference_type = std::iterator_traits<
+        std::remove_cvref_t<decltype(a1)>>::difference_type;
+
+#define FWD(x) std::forward<decltype(x)>(x)
+
+    if (ranges::distance(a1, a2) <= difference_type(ranges::size(cache))) {
+        MergeExternal(FWD(a1),
+                      FWD(a2),
+                      FWD(b1),
+                      FWD(b2),
+                      ranges::begin(cache),
+                      compare);
+    }
+    else if (ranges::size(buffer) > 0) {
+        MergeInternal(FWD(a1),
+                      FWD(a2),
+                      FWD(b1),
+                      FWD(b2),
+                      ranges::begin(buffer),
+                      compare);
+    }
+    else {
+        MergeInPlace(FWD(a1), FWD(a2), FWD(b1), FWD(b2), compare);
+    }
+#undef FWD
+}
+
+constexpr auto merge_internal_buffers(auto&& buffers,
+                                      auto&& subrangeA,
+                                      auto&& subrangeB,
+                                      auto&& cache,
+                                      auto&& compare)
+{
+    using difference_type = ranges::range_difference_t<
+        std::remove_cvref_t<decltype(subrangeA)>>;
+
+    // break the remainder of A into blocks. firstA is the
+    // uneven-sized first A block
+    ranges::subrange firstA(ranges::begin(subrangeA),
+                            ranges::begin(subrangeA) +
+                                (difference_type(ranges::size(subrangeA)) %
+                                 buffers.block_size));
+
+    ranges::subrange ABlocks{ranges::end(firstA), ranges::end(subrangeA)};
+    // swap the first value of each A block with the values
+    // in buffer1
+    ranges::swap_ranges(buffers.buffer1,
+                        ABlocks |
+                            ranges::views::stride(buffers.block_size));
+
+    // start rolling the A blocks through the B blocks!
+    // when we leave an A block behind we'll need to merge
+    // the previous A block with any B blocks that follow
+    // it, so track that information as well
+    ranges::subrange lastA{firstA};
+    ranges::subrange lastB{ranges::begin(subrangeB),
+                           ranges::begin(subrangeB)};
+    ranges::chunk_view BBlocks{subrangeB, buffers.block_size};
+
+    auto indexA = ranges::begin(buffers.buffer1);
+
+    // if the first unevenly sized A block fits into the
+    // cache, copy it there for when we go to Merge it
+    // otherwise, if the second buffer is available, block
+    // swap the contents into that
+    if (ranges::size(lastA) <= ranges::size(cache)) {
+        ranges::copy(lastA, ranges::begin(cache));
+    }
+    else if (ranges::size(buffers.buffer2) > 0) {
+        ranges::swap_ranges(lastA, buffers.buffer2);
+    }
+
+    auto blockB = ranges::begin(BBlocks);
+
+    while (not ranges::empty(ABlocks)) {
+        auto blockA = ABlocks | ranges::views::take(buffers.block_size);
+
+        // if there's a previous B block and the first
+        // value of the minimum A block is <= the last
+        // value of the previous B block, then drop
+        // that minimum A block behind. or if there are
+        // no B blocks left then keep dropping the
+        // remaining A blocks.
+        if ((ranges::size(lastB) > 0 &&
+             !compare(*(ranges::end(lastB) - 1), *indexA)) ||
+            blockB == ranges::end(BBlocks)) {
+            // figure out where to split the previous B
+            // block, and rotate it at the split
+            auto B_split = ranges::lower_bound(lastB, *indexA, compare);
+            auto B_remaining = std::distance(B_split, ranges::end(lastB));
+
+            // swap the minimum A block to the
+            // beginning of the rolling A blocks
+            {
+                // we stride over each A block by block_size to get the first element
+                // which the min element of that block.
+                auto min_elems =
+                    ABlocks | ranges::views::stride(buffers.block_size);
+
+                // we find the minimum min element of each block, and swap that
+                ranges::swap_ranges(
+                    blockA,
+                    ranges::min_element(min_elems, compare).base());
+            }
+            // swap the first item of the previous A
+            // block back with its original value,
+            // which is stored in buffer1
+            ranges::iter_swap(ranges::begin(blockA), indexA);
+            ++indexA;
+
+            // locally merge the previous A block with
+            // the B values that follow it if lastA
+            // fits into the external cache we'll use
+            // that (with MergeExternal), or if the
+            // second internal buffer exists we'll use
+            // that (with MergeInternal), or failing
+            // that we'll use a strictly in-place merge
+            // algorithm (MergeInPlace)
+            Merge(ranges::begin(lastA),
+                  ranges::end(lastA),
+                  ranges::end(lastA),
+                  B_split,
+                  buffers.buffer2,
+                  cache,
+                  compare);
+
+            if (ranges::size(buffers.buffer2) > 0 ||
+                buffers.block_size <=
+                    difference_type(ranges::size(cache))) {
+                // copy the previous A block into the
+                // cache or buffer2, since that's where
+                // we need it to be when we go to merge
+                // it anyway
+                if (buffers.block_size <=
+                    difference_type(ranges::size(cache))) {
+                    ranges::copy(blockA, ranges::begin(cache));
+                }
+                else {
+                    ranges::swap_ranges(blockA,
+                                        ranges::begin(buffers.buffer2));
+                }
+
+                // this is equivalent to rotating, but
+                // faster the area normally taken up by
+                // the A block is either the contents
+                // of buffer2, or data we don't need
+                // anymore since we memcopied it either
+                // way we don't need to retain the
+                // order of those items, so instead of
+                // rotating we can just block swap B to
+                // where it belongs
+                std::swap_ranges(B_split,
+                                 B_split + B_remaining,
+                                 ranges::end(blockA) - B_remaining);
+            }
+            else {
+                // we are unable to use the 'buffer2'
+                // trick to speed up the rotation
+                // operation since buffer2 doesn't
+                // exist, so perform a normal rotation
+                std::rotate(
+                    B_split, ranges::begin(blockA), ranges::end(blockA));
+            }
+
+            // update the range for the remaining A
+            // blocks, and the range remaining from the
+            // B block after it was split
+            lastA = shift_range(blockA, -B_remaining);
+            lastB = ranges::subrange(ranges::end(lastA),
+                                     ranges::end(lastA) + B_remaining);
+
+            // if there are no more A blocks remaining,
+            // this step is finished!
+            ABlocks = adjust_begin(ABlocks, buffers.block_size);
+        }
+        else if (difference_type(ranges::size(*blockB)) <
+                 buffers.block_size) {
+            // move the last B block, which is unevenly
+            // sized, to before the remaining A blocks,
+            // by using a rotation
+            ranges::rotate(ranges::begin(ABlocks),
+                           ranges::begin(*blockB),
+                           ranges::end(*blockB));
+
+            lastB = ranges::subrange(
+                ranges::begin(ABlocks),
+                ranges::begin(ABlocks) +
+                    difference_type(ranges::size(*blockB)));
+            ABlocks = shift_range(ABlocks, ranges::size(*blockB));
+            ++blockB;
+        }
+        else {
+            // roll the leftmost A block to the end by
+            // swapping it with the next B block
+            ranges::swap_ranges(blockA, *blockB);
+            lastB = ranges::subrange(blockA);
+
+            ABlocks = shift_range(ABlocks, buffers.block_size);
+
+            ++blockB;
+        }
+    }
+
+    // merge the last A block with the remaining B values
+    Merge(ranges::begin(lastA),
+          ranges::end(lastA),
+          ranges::end(lastA),
+          ranges::end(subrangeB),
+          buffers.buffer2,
+          cache,
+          compare);
+}
+
 constexpr auto block_sort_internal(auto&& iterator,
                                    auto&& cache,
                                    auto&& range,
                                    auto&& compare)
 {
+
     // this is where the in-place merge logic starts!
     // 1. pull out two internal buffers each containing √A unique
     // values
@@ -1172,36 +1490,7 @@ constexpr auto block_sort_internal(auto&& iterator,
     // can reuse the same buffers over and over, then redistribute
     // it when we're finished with this level
 
-    InternalBuffers buffers{range, iterator.length(), ranges::size(cache)};
-
-    // we need to find either a single contiguous space containing
-    // 2√A unique values (which will be split up into two buffers
-    // of size √A each), or we need to find one buffer of < 2√A
-    // unique values, and a second buffer of √A unique values, OR
-    // if we couldn't find that many unique values, we need the
-    // largest possible buffer we can get
-
-    // in the case where it couldn't find a single buffer of at
-    // least √A unique values, all of the Merge steps must be
-    // replaced by a different merge algorithm (MergeInPlace)
-
-    iterator.begin();
-
-    using difference_type =
-        ranges::range_difference_t<std::remove_cvref_t<decltype(range)>>;
-
-    // TODO: combine with buffers.initialize_buffers()
-    while (!iterator.finished()) {
-        auto subrangeA = iterator.nextRange(range);
-        auto subrangeB = iterator.nextRange(range);
-
-        if (buffers.unique(
-                subrangeA, subrangeB, ranges::size(cache), compare)) {
-            break;
-        }
-    }
-
-    buffers.initialize_buffers(iterator.length(), compare);
+    InternalBuffers buffers{iterator, range, cache, compare};
 
     // now that the two internal buffers have been created, it's
     // time to merge each A+B combination at this level of the
@@ -1227,339 +1516,13 @@ constexpr auto block_sort_internal(auto&& iterator,
                          *(ranges::end(subrangeA) - 1))) {
             // these two ranges weren't already in order, so we'll
             // need to merge them!
-
-            // break the remainder of A into blocks. firstA is the
-            // uneven-sized first A block
-            ranges::subrange blockA(subrangeA);
-            ranges::subrange firstA(
-                ranges::begin(subrangeA),
-                ranges::begin(subrangeA) +
-                    (difference_type(ranges::size(blockA)) %
-                     buffers.block_size));
-
-            // swap the first value of each A block with the values
-            // in buffer1
-            for (auto indexA = ranges::begin(buffers.buffer1),
-                      index = ranges::end(firstA);
-                 index < ranges::end(blockA);
-                 ++indexA, index += buffers.block_size) {
-                ranges::iter_swap(indexA, index);
-            }
-
-            // start rolling the A blocks through the B blocks!
-            // when we leave an A block behind we'll need to merge
-            // the previous A block with any B blocks that follow
-            // it, so track that information as well
-            ranges::subrange lastA{firstA};
-            ranges::subrange lastB{ranges::begin(range),
-                                   ranges::begin(range)};
-            ranges::subrange blockB{
-                ranges::begin(subrangeB),
-                ranges::begin(subrangeB) +
-                    std::min(buffers.block_size,
-                             difference_type(ranges::size(subrangeB)))};
-
-            blockA = adjust_begin(blockA, ranges::size(firstA));
-
-            auto indexA = ranges::begin(buffers.buffer1);
-
-            // if the first unevenly sized A block fits into the
-            // cache, copy it there for when we go to Merge it
-            // otherwise, if the second buffer is available, block
-            // swap the contents into that
-            if (ranges::size(lastA) <= ranges::size(cache)) {
-                ranges::copy(lastA, ranges::begin(cache));
-            }
-            else if (ranges::size(buffers.buffer2) > 0) {
-                ranges::swap_ranges(lastA, buffers.buffer2);
-            }
-
-            if (ranges::size(blockA) > 0) {
-                while (true) {
-                    // if there's a previous B block and the first
-                    // value of the minimum A block is <= the last
-                    // value of the previous B block, then drop
-                    // that minimum A block behind. or if there are
-                    // no B blocks left then keep dropping the
-                    // remaining A blocks.
-                    if ((ranges::size(lastB) > 0 &&
-                         !compare(*(ranges::end(lastB) - 1), *indexA)) ||
-                        ranges::size(blockB) == 0) {
-                        // figure out where to split the previous B
-                        // block, and rotate it at the split
-                        auto B_split =
-                            ranges::lower_bound(lastB, *indexA, compare);
-                        auto B_remaining =
-                            std::distance(B_split, ranges::end(lastB));
-
-                        // swap the minimum A block to the
-                        // beginning of the rolling A blocks
-                        auto minA = ranges::begin(blockA);
-                        for (auto findA = minA + buffers.block_size;
-                             findA < ranges::end(blockA);
-                             findA += buffers.block_size) {
-                            if (compare(*findA, *minA)) {
-                                minA = findA;
-                            }
-                        }
-                        ranges::swap_ranges(ranges::begin(blockA),
-                                            ranges::begin(blockA) +
-                                                buffers.block_size,
-                                            minA);
-
-                        // swap the first item of the previous A
-                        // block back with its original value,
-                        // which is stored in buffer1
-                        ranges::iter_swap(ranges::begin(blockA), indexA);
-                        ++indexA;
-
-                        // locally merge the previous A block with
-                        // the B values that follow it if lastA
-                        // fits into the external cache we'll use
-                        // that (with MergeExternal), or if the
-                        // second internal buffer exists we'll use
-                        // that (with MergeInternal), or failing
-                        // that we'll use a strictly in-place merge
-                        // algorithm (MergeInPlace)
-                        if (ranges::size(lastA) <= ranges::size(cache)) {
-                            MergeExternal(ranges::begin(lastA),
-                                          ranges::end(lastA),
-                                          ranges::end(lastA),
-                                          B_split,
-                                          ranges::begin(cache),
-                                          compare);
-                        }
-                        else if (ranges::size(buffers.buffer2) > 0) {
-                            MergeInternal(ranges::begin(lastA),
-                                          ranges::end(lastA),
-                                          ranges::end(lastA),
-                                          B_split,
-                                          ranges::begin(buffers.buffer2),
-                                          compare);
-                        }
-                        else {
-                            MergeInPlace(ranges::begin(lastA),
-                                         ranges::end(lastA),
-                                         ranges::end(lastA),
-                                         B_split,
-                                         compare);
-                        }
-
-                        if (ranges::size(buffers.buffer2) > 0 ||
-                            buffers.block_size <=
-                                difference_type(ranges::size(cache))) {
-                            // copy the previous A block into the
-                            // cache or buffer2, since that's where
-                            // we need it to be when we go to merge
-                            // it anyway
-                            if (buffers.block_size <=
-                                difference_type(ranges::size(cache))) {
-                                ranges::copy(ranges::begin(blockA),
-                                             ranges::begin(blockA) +
-                                                 buffers.block_size,
-                                             ranges::begin(cache));
-                            }
-                            else {
-                                std::swap_ranges(
-                                    ranges::begin(blockA),
-                                    ranges::begin(blockA) +
-                                        buffers.block_size,
-                                    ranges::begin(buffers.buffer2));
-                            }
-
-                            // this is equivalent to rotating, but
-                            // faster the area normally taken up by
-                            // the A block is either the contents
-                            // of buffer2, or data we don't need
-                            // anymore since we memcopied it either
-                            // way we don't need to retain the
-                            // order of those items, so instead of
-                            // rotating we can just block swap B to
-                            // where it belongs
-                            std::swap_ranges(B_split,
-                                             B_split + B_remaining,
-                                             ranges::begin(blockA) +
-                                                 buffers.block_size -
-                                                 B_remaining);
-                        }
-                        else {
-                            // we are unable to use the 'buffer2'
-                            // trick to speed up the rotation
-                            // operation since buffer2 doesn't
-                            // exist, so perform a normal rotation
-                            std::rotate(B_split,
-                                        ranges::begin(blockA),
-                                        ranges::begin(blockA) +
-                                            buffers.block_size);
-                        }
-
-                        // update the range for the remaining A
-                        // blocks, and the range remaining from the
-                        // B block after it was split
-                        lastA = ranges::subrange(
-                            ranges::begin(blockA) - B_remaining,
-                            ranges::begin(blockA) - B_remaining +
-                                buffers.block_size);
-                        lastB = ranges::subrange(ranges::end(lastA),
-                                                 ranges::end(lastA) +
-                                                     B_remaining);
-
-                        // if there are no more A blocks remaining,
-                        // this step is finished!
-                        blockA = adjust_begin(blockA, buffers.block_size);
-                        if (ranges::size(blockA) == 0) {
-                            break;
-                        }
-                    }
-                    else if (difference_type(ranges::size(blockB)) <
-                             buffers.block_size) {
-                        // move the last B block, which is unevenly
-                        // sized, to before the remaining A blocks,
-                        // by using a rotation
-                        ranges::rotate(ranges::begin(blockA),
-                                       ranges::begin(blockB),
-                                       ranges::end(blockB));
-
-                        lastB = ranges::subrange(
-                            ranges::begin(blockA),
-                            ranges::begin(blockA) +
-                                difference_type(ranges::size(blockB)));
-                        blockA = shift_range(blockA, ranges::size(blockB));
-                        blockB = adjust_end(
-                            blockB,
-                            -difference_type(ranges::size(blockB)));
-                    }
-                    else {
-                        // roll the leftmost A block to the end by
-                        // swapping it with the next B block
-                        std::swap_ranges(ranges::begin(blockA),
-                                         ranges::begin(blockA) +
-                                             buffers.block_size,
-                                         ranges::begin(blockB));
-                        lastB = ranges::subrange(ranges::begin(blockA),
-                                                 ranges::begin(blockA) +
-                                                     buffers.block_size);
-
-                        blockA = ranges::subrange(
-                            ranges::begin(blockA) + buffers.block_size,
-                            ranges::end(blockA) + buffers.block_size);
-                        blockB = adjust_begin(blockB, buffers.block_size);
-
-                        if (ranges::end(blockB) >
-                            ranges::end(subrangeB) - buffers.block_size) {
-                            blockB =
-                                ranges::subrange(ranges::begin(blockB),
-                                                 ranges::end(subrangeB));
-                        }
-                        else {
-                            blockB =
-                                adjust_end(blockB, buffers.block_size);
-                        }
-                    }
-                }
-            }
-
-            // merge the last A block with the remaining B values
-            if (ranges::size(lastA) <= ranges::size(cache)) {
-                MergeExternal(ranges::begin(lastA),
-                              ranges::end(lastA),
-                              ranges::end(lastA),
-                              ranges::end(subrangeB),
-                              ranges::begin(cache),
-                              compare);
-            }
-            else if (ranges::size(buffers.buffer2) > 0) {
-                MergeInternal(ranges::begin(lastA),
-                              ranges::end(lastA),
-                              ranges::end(lastA),
-                              ranges::end(subrangeB),
-                              ranges::begin(buffers.buffer2),
-                              compare);
-            }
-            else {
-                MergeInPlace(ranges::begin(lastA),
-                             ranges::end(lastA),
-                             ranges::end(lastA),
-                             ranges::end(subrangeB),
-                             compare);
-            }
+            merge_internal_buffers(
+                buffers, subrangeA, subrangeB, cache, compare);
         }
     }
 
-    // when we're finished with this merge step we should have the
-    // one or two internal buffers left over, where the second
-    // buffer is all jumbled up insertion sort the second buffer,
-    // then redistribute the buffers back into the array using the
-    // opposite process used for creating the buffer
-
-    // while an unstable sort like std::sort could be applied here,
-    // in benchmarks it was consistently slightly slower than a
-    // simple insertion sort, even for tens of millions of items.
-    // this may be because insertion sort is quite fast when the
-    // data is already somewhat sorted, like it is here
-    InsertionSort(ranges::begin(buffers.buffer2),
-                  ranges::end(buffers.buffer2),
-                  compare);
-
-    for (buffers.pull_index = 0; buffers.pull_index < 2;
-         ++buffers.pull_index) {
-        auto unique = buffers.pull_itrs[buffers.pull_index].count * 2;
-        if (buffers.pull_itrs[buffers.pull_index].from >
-            buffers.pull_itrs[buffers.pull_index].to) {
-            // the values were pulled out to the left, so
-            // redistribute them back to the right
-            ranges::subrange buffer(
-                ranges::begin(buffers.pull_itrs[buffers.pull_index].range),
-                ranges::begin(
-                    buffers.pull_itrs[buffers.pull_index].range) +
-                    buffers.pull_itrs[buffers.pull_index].count);
-            while (ranges::size(buffer) > 0) {
-                buffers.buffer_index = FindFirstForward(
-                    ranges::end(buffer),
-                    ranges::end(
-                        buffers.pull_itrs[buffers.pull_index].range),
-                    *ranges::begin(buffer),
-                    compare,
-                    unique);
-                difference_type amount =
-                    buffers.buffer_index - ranges::end(buffer);
-                std::rotate(ranges::begin(buffer),
-                            ranges::end(buffer),
-                            buffers.buffer_index);
-                buffer =
-                    ranges::subrange(ranges::begin(buffer) + (amount + 1),
-                                     ranges::end(buffer) + amount);
-                unique -= 2;
-            }
-        }
-        else if (buffers.pull_itrs[buffers.pull_index].from <
-                 buffers.pull_itrs[buffers.pull_index].to) {
-            // the values were pulled out to the right, so
-            // redistribute them back to the left
-            ranges::subrange buffer(
-                ranges::end(buffers.pull_itrs[buffers.pull_index].range) -
-                    buffers.pull_itrs[buffers.pull_index].count,
-                ranges::end(buffers.pull_itrs[buffers.pull_index].range));
-            while (ranges::size(buffer) > 0) {
-                buffers.buffer_index = FindLastBackward(
-                    ranges::begin(
-                        buffers.pull_itrs[buffers.pull_index].range),
-                    ranges::begin(buffer),
-                    *(ranges::end(buffer) - 1),
-                    compare,
-                    unique);
-                difference_type amount =
-                    ranges::begin(buffer) - buffers.buffer_index;
-                std::rotate(buffers.buffer_index,
-                            buffers.buffer_index + amount,
-                            ranges::end(buffer));
-                buffer =
-                    ranges::subrange(ranges::begin(buffer) - amount,
-                                     ranges::end(buffer) - (amount + 1));
-                unique -= 2;
-            }
-        }
-    }
+    // clean up internal buffers
+    buffers.clean_up(compare);
 }
 
 // bottom-up merge sort combined with an in-place merge algorithm for O(1)
