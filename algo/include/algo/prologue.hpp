@@ -20,4 +20,4 @@
 #undef FWD
 #undef RNG_VALUE_T
 #undef RNG_ITR_T
-
+#undef ASSUME
