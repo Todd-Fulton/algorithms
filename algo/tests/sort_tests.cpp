@@ -26,13 +26,12 @@
 #include <list>
 #include <vector>
 
+using ranges::shuffle;
 using std::greater;
 using std::list;
 using std::mt19937;
 using std::vector;
-using ranges::shuffle;
 using testing::rand_range;
-
 
 TEST(Sorting, InsertSort_Ascending_Vector)
 {
@@ -146,35 +145,58 @@ TEST(Sorting, HeapSort_Descending_Vector)
     EXPECT_EQ(given, expected);
 }
 
-TEST(Sorting, QuickSort_Ascending_Vector)
+TEST(Sorting, QuickSort_Ascending_Vector_Hoare_Scheme)
 {
-    vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
-    vector<int> given{expected};
-
-    mt19937 gen{seed}; // NOLINT
-
-    shuffle(given, gen);
-
-    algo::quick_sort(given);
-
-    EXPECT_EQ(given, expected);
+    auto expected = rand_range<>();
+    auto result = expected | algo::quick_sort(algo::ordering::ascending{});
+    ranges::sort(expected);
+    EXPECT_EQ(result, expected);
 }
 
-TEST(Sorting, QuickSort_Descending_Vector)
+TEST(Sorting, QuickSort_Descending_Vector_Hoare_Scheme)
 {
-    vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
-    std::ranges::reverse(expected);
-    vector<int> given{expected};
+    auto expected = rand_range<>();
+    auto result = expected | algo::quick_sort(algo::ordering::decending{});
+    ranges::sort(expected, algo::quick_sort.decending);
+    EXPECT_EQ(result, expected);
+}
 
-    mt19937 gen{seed}; // NOLINT
+TEST(Sorting, QuickSort_Ascending_Vector_Lomuto_Scheme)
+{
+    auto expected = rand_range<>();
+    auto result = expected | algo::quick_sort(algo::ordering::ascending{},
+                                              algo::lomuto_partition);
+    ranges::sort(expected);
+    EXPECT_EQ(result, expected);
+}
 
-    shuffle(given, gen);
+TEST(Sorting, QuickSort_Descending_Vector_Lomuto_Scheme)
+{
+    auto expected = rand_range<>();
+    auto result = expected | algo::quick_sort(algo::ordering::decending{},
+                                              algo::lomuto_partition);
+    ranges::sort(expected, algo::quick_sort.decending);
+    EXPECT_EQ(result, expected);
+}
 
-    algo::quick_sort(given, greater<>{});
+TEST(Sorting, QuickSort_Ascending_Vector_Branchless_Lomuto_Scheme)
+{
+    auto expected = rand_range<>();
+    auto result =
+        expected | algo::quick_sort(algo::ordering::ascending{},
+                                    algo::branchless_lomuto_partition);
+    ranges::sort(expected);
+    EXPECT_EQ(result, expected);
+}
 
-    EXPECT_EQ(given, expected);
+TEST(Sorting, QuickSort_Descending_Vector_Branchless_Lomuto_Scheme)
+{
+    auto expected = rand_range<>();
+    auto result =
+        expected | algo::quick_sort(algo::ordering::decending{},
+                                    algo::branchless_lomuto_partition);
+    ranges::sort(expected, algo::quick_sort.decending);
+    EXPECT_EQ(result, expected);
 }
 
 TEST(Sorting, ShellSort_Ascending_Vector)

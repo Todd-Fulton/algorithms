@@ -71,10 +71,12 @@ struct _fn
                                      Predicate&& predicate,
                                      Projection&& projection = {})
     {
-        return algorithm(FWD(range), FWD(predicate), FWD(projection));
+        return tag_invoke(
+            _fn{}, FWD(range), FWD(predicate), FWD(projection));
     }
 
     template <class Predicate, class Projection = std::identity>
+    requires(!ranges::range<Predicate>)
     static constexpr auto operator()(Predicate&& predicate,
                                      Projection&& projection = {})
     {
@@ -83,12 +85,12 @@ struct _fn
     }
 
 private:
-    friend constexpr auto tag_invoke(_fn const& f,
+    friend constexpr auto tag_invoke(_fn const& /*f*/,
                                      ranges::forward_range auto&& range,
                                      auto&& predicate,
                                      auto&& projection = std::identity{})
     {
-        return f(FWD(range), FWD(predicate), FWD(projection));
+        return algorithm(FWD(range), FWD(predicate), FWD(projection));
     }
 };
 } // namespace _cpo
@@ -173,10 +175,12 @@ struct _fn
                                      Predicate&& predicate,
                                      Projection&& projection = {})
     {
-        return algorithm(FWD(range), FWD(predicate), FWD(projection));
+        return tag_invoke(
+            _fn{}, FWD(range), FWD(predicate), FWD(projection));
     }
 
     template <class Predicate, class Projection = std::identity>
+    requires(!ranges::range<Predicate>)
     static constexpr auto operator()(Predicate&& predicate,
                                      Projection&& projection = {})
     {
@@ -186,12 +190,12 @@ struct _fn
 
 private:
     friend constexpr auto tag_invoke(
-        _fn const& f,
+        _fn const& /*f*/,
         ranges::random_access_range auto&& range,
         auto&& predicate,
         auto&& projection = std::identity{})
     {
-        return f(FWD(range), FWD(predicate), FWD(projection));
+        return algorithm(FWD(range), FWD(predicate), FWD(projection));
     }
 };
 } // namespace _cpo

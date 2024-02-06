@@ -18,49 +18,212 @@
 
 #pragma once
 
+#include "ordering.hpp"
+#include <algo/partition.hpp>
+
+#include <range/v3/view/subrange.hpp>
 #include <ranges>
+#include <unifex/tag_invoke.hpp>
+
+#include <algorithm>
+
+#include <algo/prelude.hpp>
+
 namespace algo
 {
 
 namespace _quick_sort
 {
-template <class BItr, class EItr, class CMP = std::less<>>
-auto partition(BItr&& begin, EItr&& end, CMP const& cmp)
-requires(std::random_access_iterator<std::remove_cvref_t<BItr>> and
-         std::random_access_iterator<std::remove_cvref_t<EItr>>)
+
+template <class Ordering, class T = void>
+struct comp;
+
+template <template <class> class Cmp, class T>
+struct comp<Cmp<T>, T>
 {
-    auto const pivot = *(begin + (std::distance(begin, end) / 2));
-    auto i = begin;
-    auto j = end - 1;
+    using type = Cmp<T>;
+};
 
-    while (true) {
-        for(; cmp(*i, pivot); ++i) {}
-        for(; cmp(pivot, *j); --j) {}
+template <template <class> class Cmp, class T>
+struct comp<Cmp<void>, T>
+{
+    using type = Cmp<T>;
+};
 
-        if (i >= j) {
-            return j;
+template <class T>
+struct comp<ordering::ascending, T>
+{
+    using type = std::less<T>;
+};
+
+template <class T>
+struct comp<ordering::decending, T>
+{
+    using type = std::greater<T>;
+};
+
+template <class Ordering, class T>
+using comp_t = typename comp<Ordering, T>::type;
+
+template <auto const& partition_algorithm>
+struct Algorithm
+{
+    constexpr static void operator()(auto first,
+                                     auto last,
+                                     auto const& cmp)
+    requires(
+        std::random_access_iterator<
+            std::remove_cvref_t<decltype(first)>> and
+        std::random_access_iterator<std::remove_cvref_t<decltype(last)>>)
+    {
+        auto size = ranges::distance(first, last);
+        if (size < 2) {
+            return;
         }
-        using std::swap;
-        swap(*i, *j);
+        auto const pivot = *(first + ((size + 1) / 2));
+
+        auto middle1 = get<0>(partition_algorithm(
+            ranges::subrange(first, last),
+            [&, pivot](auto const& elm) { return cmp(elm, pivot); }));
+
+        auto middle2 = get<0>(partition_algorithm(
+            ranges::subrange(middle1, last),
+            [&, pivot](auto const& elm) { return !cmp(pivot, elm); }));
+
+        // all equal elems
+        if (middle1 != last) {
+            Algorithm::operator()(first, middle1, cmp);
+        }
+
+        if (middle2 != first) {
+            Algorithm::operator()(middle2, last, cmp);
+        }
     }
+};
+
+template <std::ranges::contiguous_range RNG,
+          class Partition,
+          class CMP = std::less<>>
+auto algorithm(RNG rng,
+               Partition const& /*partition_algorithm*/,
+               CMP const& cmp = {}) -> RNG
+{
+    static constexpr auto partition_algorithm = Partition{};
+    constexpr auto alg = Algorithm<partition_algorithm>{};
+    if (!ranges::empty(rng)) {
+        alg(std::begin(rng), std::end(rng), cmp);
+    }
+    return rng;
 }
+
+template <class Ordering, class Paritition>
+struct _adapter final
+{
+    struct type;
+};
+
+template <class Ordering, class Partition>
+using adapter = _adapter<std::remove_cvref_t<Ordering>, Partition>::type;
+
+namespace _cpo
+{
+struct _fn
+{
+    static constexpr auto operator()(auto const& ordering)
+    {
+        return adapter<decltype(ordering), unifex::tag_t<hoare_partition>>{
+            hoare_partition};
+    }
+
+    template <class Ordering>
+    static constexpr auto operator()(
+        ranges::contiguous_range auto&& range,
+        Ordering&& ordering = ordering::ascending{})
+    {
+        return tag_invoke(
+            _fn{}, FWD(range), FWD(ordering), hoare_partition);
+    }
+
+    template <class Partition>
+    static constexpr auto operator()(auto const& ordering,
+                                     Partition const& partition_algorithm)
+    {
+        return adapter<decltype(ordering), Partition>{partition_algorithm};
+    }
+
+    template <class Ordering, class Partition>
+    static constexpr auto operator()(
+        ranges::contiguous_range auto&& range,
+        Partition const& partition_algorithm,
+        Ordering&& ordering = ordering::ascending{})
+    {
+        return tag_invoke(
+            _fn{}, FWD(range), FWD(ordering), partition_algorithm);
+    }
+
+    comp_t<ordering::decending, void> decending{};
+    comp_t<ordering::ascending, void> ascending{};
+
+private:
+    template <class Ordering, class Partition>
+    friend constexpr auto tag_invoke(_fn const& /*unused*/,
+                                     ranges::contiguous_range auto&& range,
+                                     Ordering const& /*ordering*/,
+                                     Partition const& partition_algorithm)
+    {
+        return algorithm(FWD(range),
+                         partition_algorithm,
+                         comp_t<Ordering, RNG_VALUE_T(range)>{});
+    }
+};
+} // namespace _cpo
 } // namespace _quick_sort
 
-template <class BItr, class EItr, class CMP = std::less<>>
-void quick_sort(BItr&& begin, EItr&& end, CMP const& cmp)
-requires(std::random_access_iterator<std::remove_cvref_t<BItr>> and
-         std::random_access_iterator<std::remove_cvref_t<EItr>>)
-{
-    if (begin < end) {
-        auto part_itr = _quick_sort::partition(begin, end, cmp);
-        quick_sort(begin, part_itr, cmp);
-        quick_sort(++part_itr, end, cmp);
-    }
-}
+constexpr auto quick_sort = _quick_sort::_cpo::_fn{};
 
-template <std::ranges::contiguous_range RNG, class CMP = std::less<>>
-void quick_sort(RNG& rng, CMP const& cmp = {})
+namespace _quick_sort
 {
-    quick_sort(std::begin(rng), std::end(rng), cmp);
-}
+template <class Ordering, class Partition>
+struct _adapter<Ordering, Partition>::type final
+{
+    Partition const& partition_algorithm; // NOLINT
+
+    template <class Adapter>
+    requires(std::same_as<std::remove_cvref_t<Adapter>, type>)
+    friend constexpr auto operator|(ranges::contiguous_range auto&& range,
+                                    Adapter&& adapter)
+    {
+        return tag_invoke(
+            quick_sort,
+            FWD(range),
+            Ordering{},
+            std::forward<Adapter>(adapter).partition_algorithm);
+    }
+
+    constexpr auto operator()(this auto&& self,
+                              ranges::contiguous_range auto&& range)
+    {
+        return tag_invoke(quick_sort,
+                          FWD(range),
+                          Ordering{},
+                          FWD(self).partition_algorithm);
+    }
+
+    template <class Partition2>
+    constexpr auto operator()(Partition2 const& partition_algorithm2) const
+    {
+        return type{partition_algorithm2};
+    }
+
+    template <class Partition2>
+    constexpr auto operator()(ranges::contiguous_range auto&& range,
+                              Partition2 const& partition_algorithm2) const
+    {
+        return tag_invoke(
+            quick_sort, FWD(range), Ordering{}, partition_algorithm2);
+    }
+};
+} // namespace _quick_sort
 } // namespace algo
+
+#include <algo/prologue.hpp>

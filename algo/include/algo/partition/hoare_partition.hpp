@@ -18,7 +18,6 @@
 
 #pragma once
 
-
 #include <range/v3/algorithm/find_if.hpp>
 #include <range/v3/algorithm/find_if_not.hpp>
 #include <range/v3/algorithm/reverse.hpp>
@@ -43,29 +42,40 @@ algorithm(auto range, auto&& predicate, auto&& projection) noexcept(
         std::invoke_result_t<decltype(projection), RNG_VALUE_T(range)>>)
     -> std::pair<RNG_ITR_T(range), std::remove_cvref_t<decltype(range)>>
 {
-    auto low = begin(range);
-    auto high = prev(end(range));
+    std::pair<RNG_ITR_T(range), std::remove_cvref_t<decltype(range)>> ret;
 
-    while (true) {
-        while (predicate(projection(*low)) and low < high) {
-            ++low;
-        }
-        while (!predicate(projection(*high)) and low < high) {
-            --high;
-        }
-        if (low < high) {
-            ranges::iter_swap(low, high);
-            ++low;
-            --high;
-        }
-        else {
-            if (predicate(projection(*low))) {
+    if (ranges::size(range) < 2) {
+        ret = std::make_pair(begin(range), std::move(range));
+    }
+    else {
+        auto low = begin(range);
+        auto high = prev(end(range));
+
+        while (true) {
+            while (predicate(projection(*low)) and low < high) {
                 ++low;
             }
-            ranges::iter_swap(low, prev(end(range)));
-            return std::make_pair(std::move(low), std::move(range));
+            while (!predicate(projection(*high)) and low < high) {
+                --high;
+            }
+            if (low < high) {
+                ranges::iter_swap(low, high);
+                ++low;
+                --high;
+            }
+            else {
+                if (predicate(projection(*low))) {
+                    ++low;
+                }
+                if (low < end(range)) {
+                    ranges::iter_swap(low, prev(end(range)));
+                }
+                ret = std::make_pair(std::move(low), std::move(range));
+                break;
+            }
         }
     }
+    return ret;
 }
 
 template <class Predicate, class Projection>
@@ -94,6 +104,7 @@ struct _fn
     }
 
     template <class Predicate, class Projection = std::identity>
+    requires(!ranges::range<Predicate>)
     static constexpr auto operator()(Predicate&& predicate,
                                      Projection&& projection = {})
     {
@@ -268,4 +279,3 @@ struct _adapter<Predicate, Projection>::type
 } // namespace algo
 
 #include <algo/prologue.hpp>
-
