@@ -15,8 +15,21 @@
  *License along with this program.  If not, see
  *<https://www.gnu.org/licenses/>.
  **/
+#include <utility>
 
 #define FWD(x) std::forward<decltype(x)>(x)
 #define RNG_VALUE_T(range) ranges::range_value_t<decltype(range)>
 #define RNG_ITR_T(range) ranges::iterator_t<decltype(range)>
+
+#if defined(__clang__)
+#define ASSUME(expr) __builtin_assume(expr)
+#elif defined(__GNUC__) && !defined(__ICC)
+#define ASSUME(expr)                                                      \
+    if (expr) {}                                                          \
+    else {                                                                \
+        __builtin_unreachable();                                          \
+    }
+#elif defined(_MSC_VER) || defined(__ICC)
+#define ASSUME(expr) __assume(expr)
+#endif
 
