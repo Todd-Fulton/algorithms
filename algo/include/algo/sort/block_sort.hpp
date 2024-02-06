@@ -20,17 +20,7 @@
 
 #include "ordering.hpp"
 
-#if defined(__clang__)
-#define ASSUME(expr) __builtin_assume(expr)
-#elif defined(__GNUC__) && !defined(__ICC)
-#define ASSUME(expr)                                                      \
-    if (expr) {}                                                          \
-    else {                                                                \
-        __builtin_unreachable();                                          \
-    }
-#elif defined(_MSC_VER) || defined(__ICC)
-#define ASSUME(expr) __assume(expr)
-#endif
+#include <algo/prelude.hpp>
 
 namespace algo
 {
@@ -66,6 +56,7 @@ struct pred<ordering::decending, T>
 
 template <class Ordering, class T>
 using pred_t = typename pred<Ordering, T>::type;
+
 constexpr auto adjust_begin(auto& range, auto diff)
 {
     using difference_type =
@@ -1283,8 +1274,6 @@ constexpr auto Merge(auto&& a1,
     using difference_type = std::iterator_traits<
         std::remove_cvref_t<decltype(a1)>>::difference_type;
 
-#define FWD(x) std::forward<decltype(x)>(x)
-
     if (ranges::distance(a1, a2) <= difference_type(ranges::size(cache))) {
         MergeExternal(FWD(a1),
                       FWD(a2),
@@ -1304,7 +1293,6 @@ constexpr auto Merge(auto&& a1,
     else {
         MergeInPlace(FWD(a1), FWD(a2), FWD(b1), FWD(b2), compare);
     }
-#undef FWD
 }
 
 constexpr auto merge_internal_buffers(auto&& buffers,
@@ -1561,9 +1549,9 @@ constexpr auto block_sort_internal(auto&& iterator,
 // memory use
 template <ranges::contiguous_range RANGE,
           typename Comparison = std::less<>>
-constexpr auto block_sort(RANGE range,
-                          Comparison const& compare = {},
-                          std::optional<size_t> const& cache_size_opt = {})
+constexpr auto algorithm(RANGE range,
+                         Comparison const& compare = {},
+                         std::optional<size_t> const& cache_size_opt = {})
     -> RANGE
 {
     // map first and last to a C-style array, so we don't have to change
@@ -1616,80 +1604,99 @@ constexpr auto block_sort(RANGE range,
     return range;
 }
 
-template <class COMPARE>
-struct block_sort_adapter
+template <class Ordering>
+struct _adapter final
 {
-    COMPARE compare;
-    std::optional<size_t> cache_size;
-
-    friend constexpr auto operator|(ranges::contiguous_range auto&& range,
-                                    block_sort_adapter const& adapter)
-    {
-        return block_sort(
-            std::forward<decltype(range)>(range),
-            pred_t<COMPARE, ranges::range_value_t<decltype(range)>>{},
-            adapter.cache_size);
-    }
-
-    constexpr auto operator()(ranges::contiguous_range auto&& range) const
-    {
-        return block_sort(
-            std::forward<decltype(range)>(range),
-            pred_t<COMPARE, ranges::range_value_t<decltype(range)>>{},
-            cache_size);
-    }
-
-    constexpr auto operator()(size_t cache_sz) const
-    {
-        return block_sort_adapter{compare, cache_sz};
-    }
-
-    constexpr auto operator()(ranges::contiguous_range auto&& range,
-                              size_t cache_sz) const
-    {
-        return block_sort(
-            std::forward<decltype(range)>(range),
-            pred_t<COMPARE, ranges::range_value_t<decltype(range)>>{},
-            cache_sz);
-    }
+    struct type;
 };
 
-} // namespace _block_sort
+template <class Ordering>
+using adapter = _adapter<std::remove_cvref_t<Ordering>>::type;
 
-constexpr struct
+namespace _cpo
 {
+struct _fn
+{
+
     static constexpr auto operator()(
         auto const& compare,
         std::optional<std::size_t> const& cache_size = std::nullopt)
     {
-        return _block_sort::block_sort_adapter{compare, cache_size};
+        return adapter<decltype(compare)>{cache_size};
     }
 
-    template <class COMPARE>
+    template <class Ordering>
     static constexpr auto operator()(
         ranges::contiguous_range auto&& range,
-        COMPARE const& /*unused*/ = ordering::ascending{},
+        Ordering&& ordering = ordering::ascending{},
         std::optional<size_t> const& cache_size = std::nullopt)
     {
-        return _block_sort::block_sort(
-            std::forward<decltype(range)>(range),
-            _block_sort::pred_t<COMPARE,
-                                ranges::range_value_t<decltype(range)>>{},
-            cache_size);
-    }
-
-    static constexpr auto operator()()
-    {
-        return _block_sort::block_sort_adapter{ordering::ascending{},
-                                               std::nullopt};
+        return tag_invoke(_fn{}, FWD(range), FWD(ordering), cache_size);
     }
 
     _block_sort::pred_t<ordering::decending, void> decending{};
     _block_sort::pred_t<ordering::ascending, void> ascending{};
 
-} block_sort;
+private:
+    template <class Ordering>
+    friend constexpr auto tag_invoke(_fn const& /*unused*/,
+                                     ranges::contiguous_range auto&& range,
+                                     Ordering const& /*ordering*/,
+                                     auto&& cache_size)
+    {
+        return algorithm(FWD(range),
+                         pred_t<Ordering, RNG_VALUE_T(range)>{},
+                         FWD(cache_size));
+    }
+};
+} // namespace _cpo
 
+} // namespace _block_sort
+
+constexpr auto block_sort = _block_sort::_cpo::_fn{};
+
+namespace _block_sort
+{
+
+template <class Ordering>
+struct _adapter<Ordering>::type final
+{
+    std::optional<size_t> cache_size;
+
+    template <class Adapter>
+    requires(std::same_as<std::remove_cvref_t<Adapter>, type>)
+    friend constexpr auto operator|(ranges::contiguous_range auto&& range,
+                                    Adapter&& adapter)
+    {
+        return tag_invoke(block_sort,
+                          FWD(range),
+                          Ordering{},
+                          std::forward<Adapter>(adapter).cache_size);
+    }
+
+    constexpr auto operator()(this auto&& self,
+                              ranges::contiguous_range auto&& range)
+    {
+        return tag_invoke(
+            block_sort, FWD(range), Ordering{}, FWD(self).cache_size);
+    }
+
+    constexpr auto operator()(size_t cache_sz) const
+    {
+        return type{cache_sz};
+    }
+
+    constexpr auto operator()(ranges::contiguous_range auto&& range,
+                              size_t cache_sz) const
+    {
+        return tag_invoke(block_sort, FWD(range), Ordering{}, cache_sz);
+    }
+};
+
+} // namespace _block_sort
 constexpr auto block_sort_ascending = block_sort(ordering::ascending{});
 constexpr auto block_sort_decending = block_sort(ordering::decending{});
 
 } // namespace algo
+
+#include <algo/prologue.hpp>
