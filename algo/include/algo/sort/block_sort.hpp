@@ -18,6 +18,8 @@
 
 #include <range/v3/all.hpp>
 
+#include "ordering.hpp"
+
 #if defined(__clang__)
 #define ASSUME(expr) __builtin_assume(expr)
 #elif defined(__GNUC__) && !defined(__ICC)
@@ -35,6 +37,35 @@ namespace algo
 namespace _block_sort
 {
 
+template <class Ordering, class T = void>
+struct pred;
+
+template <template <class> class Cmp, class T>
+struct pred<Cmp<T>, T>
+{
+    using type = Cmp<T>;
+};
+
+template <template <class> class Cmp, class T>
+struct pred<Cmp<void>, T>
+{
+    using type = Cmp<T>;
+};
+
+template <class T>
+struct pred<ordering::ascending, T>
+{
+    using type = std::less<T>;
+};
+
+template <class T>
+struct pred<ordering::decending, T>
+{
+    using type = std::greater<T>;
+};
+
+template <class Ordering, class T>
+using pred_t = typename pred<Ordering, T>::type;
 constexpr auto adjust_begin(auto& range, auto diff)
 {
     using difference_type =
@@ -1343,12 +1374,13 @@ constexpr auto merge_internal_buffers(auto&& buffers,
             // swap the minimum A block to the
             // beginning of the rolling A blocks
             {
-                // we stride over each A block by block_size to get the first element
-                // which the min element of that block.
+                // we stride over each A block by block_size to get the
+                // first element which the min element of that block.
                 auto min_elems =
                     ABlocks | ranges::views::stride(buffers.block_size);
 
-                // we find the minimum min element of each block, and swap that
+                // we find the minimum min element of each block, and swap
+                // that
                 ranges::swap_ranges(
                     blockA,
                     ranges::min_element(min_elems, compare).base());
@@ -1593,15 +1625,18 @@ struct block_sort_adapter
     friend constexpr auto operator|(ranges::contiguous_range auto&& range,
                                     block_sort_adapter const& adapter)
     {
-        return block_sort(std::forward<decltype(range)>(range),
-                          adapter.compare,
-                          adapter.cache_size);
+        return block_sort(
+            std::forward<decltype(range)>(range),
+            pred_t<COMPARE, ranges::range_value_t<decltype(range)>>{},
+            adapter.cache_size);
     }
 
     constexpr auto operator()(ranges::contiguous_range auto&& range) const
     {
         return block_sort(
-            std::forward<decltype(range)>(range), compare, cache_size);
+            std::forward<decltype(range)>(range),
+            pred_t<COMPARE, ranges::range_value_t<decltype(range)>>{},
+            cache_size);
     }
 
     constexpr auto operator()(size_t cache_sz) const
@@ -1613,7 +1648,9 @@ struct block_sort_adapter
                               size_t cache_sz) const
     {
         return block_sort(
-            std::forward<decltype(range)>(range), compare, cache_sz);
+            std::forward<decltype(range)>(range),
+            pred_t<COMPARE, ranges::range_value_t<decltype(range)>>{},
+            cache_sz);
     }
 };
 
@@ -1625,30 +1662,34 @@ constexpr struct
         auto const& compare,
         std::optional<std::size_t> const& cache_size = std::nullopt)
     {
-        return _block_sort::block_sort_adapter{
-            std::forward<decltype(compare)>(compare), cache_size};
+        return _block_sort::block_sort_adapter{compare, cache_size};
     }
 
+    template <class COMPARE>
     static constexpr auto operator()(
         ranges::contiguous_range auto&& range,
-        auto const& compare = std::less<>{},
+        COMPARE const& /*unused*/ = ordering::ascending{},
         std::optional<size_t> const& cache_size = std::nullopt)
     {
         return _block_sort::block_sort(
             std::forward<decltype(range)>(range),
-            std::forward<decltype(compare)>(compare),
+            _block_sort::pred_t<COMPARE,
+                                ranges::range_value_t<decltype(range)>>{},
             cache_size);
     }
 
     static constexpr auto operator()()
     {
-        return _block_sort::block_sort_adapter{std::less<>{},
+        return _block_sort::block_sort_adapter{ordering::ascending{},
                                                std::nullopt};
     }
 
+    _block_sort::pred_t<ordering::decending, void> decending{};
+    _block_sort::pred_t<ordering::ascending, void> ascending{};
+
 } block_sort;
 
-constexpr auto block_sort_ascending = block_sort(std::less<>{});
-constexpr auto block_sort_decending = block_sort(std::greater<>{});
+constexpr auto block_sort_ascending = block_sort(ordering::ascending{});
+constexpr auto block_sort_decending = block_sort(ordering::decending{});
 
 } // namespace algo
