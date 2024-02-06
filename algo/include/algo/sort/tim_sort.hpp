@@ -16,9 +16,7 @@
  *<https://www.gnu.org/licenses/>.
  **/
 
-#include "../search/binary_search.hpp"
 #include "insertion_sort.hpp"
-#include "merge_sort.hpp"
 #include <algorithm>
 #include <range/v3/all.hpp>
 #include <range/v3/iterator/traits.hpp>

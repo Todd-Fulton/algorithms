@@ -27,8 +27,8 @@ namespace algo
 namespace _bubble_sort
 {
 
-template <ranges::forward_range RNG, class CMP = std::greater<>>
-void bubble_sort(RNG&& rng, CMP cmp = CMP{})
+template <ranges::forward_range RNG, class CMP>
+auto bubble_sort(RNG&& rng, CMP const& cmp) -> RNG
 {
     auto begin = ranges::begin(rng);
     auto end = ranges::end(rng);
@@ -56,51 +56,83 @@ template <class Ordering, class T = void>
 struct pred;
 
 template <class T>
-struct pred<ordering::ascending, T> : std::greater<T>
-{};
+struct pred<ordering::ascending, T>
+{
+    using type = std::greater<T>;
+};
 
 template <class T>
-struct pred<ordering::decending, T> : std::less<T>
-{};
+struct pred<ordering::decending, T>
+{
+    using type = std::less<T>;
+};
+
+template <class Ordering, class T>
+using pred_t = typename pred<Ordering, T>::type;
+
+template <class COMPARE, class SCHED = void>
+struct bubble_sort_adapter;
 
 template <class COMPARE>
-struct bubble_sort_adapter
+struct bubble_sort_adapter<COMPARE, void>
 {
+    [[no_unique_address]] COMPARE compare;
+
     friend constexpr auto operator|(
         ranges::forward_range auto range,
         [[maybe_unused]] bubble_sort_adapter const& _)
     {
         return bubble_sort(
             std::move(range),
-            pred<COMPARE, ranges::range_value_t<decltype(range)>>{});
+            pred_t<COMPARE, ranges::range_value_t<decltype(range)>>{});
     }
 };
 
+template <class COMPARE, class SCHED>
+struct bubble_sort_adapter
+{
+    // Scheduler
+    SCHED sched;
+    [[no_unique_address]] COMPARE compare;
+
+    friend constexpr auto operator|(
+        ranges::forward_range auto range,
+        [[maybe_unused]] bubble_sort_adapter&& adapter)
+    {
+        return bubble_sort(
+            std::move(range),
+            std::forward<decltype(adapter)>(adapter).sched,
+            pred_t<COMPARE, ranges::range_value_t<decltype(range)>>{});
+    }
+};
 } // namespace _bubble_sort
 
 constexpr struct
 {
     template <class Ordering = ordering::ascending>
-    static constexpr auto operator()(
-        [[maybe_unused]] auto const& ordering = Ordering{})
+    static constexpr auto operator()([[maybe_unused]] auto const& ordering)
     {
         return _bubble_sort::bubble_sort_adapter<Ordering>{};
     }
 
     template <class Ordering = ordering::ascending>
-    static constexpr auto operator()(ranges::contiguous_range auto&& range,
+    static constexpr auto operator()(ranges::forward_range auto range,
                                      auto const& /*unused*/ = Ordering{})
     {
         return _bubble_sort::bubble_sort(
-            std::forward<decltype(range)>(range),
-            _bubble_sort::pred<Ordering,
-                               ranges::range_value_t<decltype(range)>>{});
+            std::move(range),
+            _bubble_sort::pred_t<
+                Ordering,
+                ranges::range_value_t<decltype(range)>>{});
     }
 
     static constexpr auto operator()()
     {
         return _bubble_sort::bubble_sort_adapter<ordering::ascending>{};
     }
+
+    _bubble_sort::pred_t<ordering::ascending, void> ascending{};
+    _bubble_sort::pred_t<ordering::decending, void> decending{};
 
 } bubble_sort;
 

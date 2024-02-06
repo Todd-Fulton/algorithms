@@ -97,7 +97,7 @@ void merge_sort(RNG& rng, CMP cmp = CMP{})
 
     // NOTE: (A.1) The precondition on the size of the range rng depends
     // on the location in memory of the start dst. If the address of the
-    // begining of dst memory storage is X, then X + size(rng) should be
+    // beginning of dst memory storage is X, then X + size(rng) should be
     // less than or equal to the maximum addressible limit of the system.
     top_down_split_merge(
         top_down_split_merge,
