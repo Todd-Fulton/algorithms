@@ -19,83 +19,45 @@
 #include <gtest/gtest.h>
 
 #include <algo/sort.hpp>
+#include <range/v3/algorithm.hpp>
 
-#include <algorithm>
+#include "rand_range.hpp"
+
 #include <list>
-#include <random>
 #include <vector>
 
 using std::greater;
 using std::list;
 using std::mt19937;
 using std::vector;
-using std::ranges::shuffle;
+using ranges::shuffle;
+using testing::rand_range;
 
-extern unsigned long long seed;       // NOLINT
-extern unsigned long long range_size; // NOLINT
 
 TEST(Sorting, InsertSort_Ascending_Vector)
 {
-    vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
-    vector<int> given{expected};
-
-    mt19937 gen{seed}; // NOLINT
-
-    shuffle(given, gen);
-
-    algo::insertion_sort(given);
-
-    EXPECT_EQ(given, expected);
+    EXPECT_TRUE(ranges::is_sorted(rand_range<>() |
+                                  algo::insertion_sort_ascending));
 }
 
 TEST(Sorting, InsertSort_Ascending_List)
 {
-    list<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
-    vector<int> shuffled{expected.begin(), expected.end()};
-
-    mt19937 gen{seed}; // NOLINT
-
-    shuffle(shuffled, gen);
-
-    list<int> given{shuffled.begin(), shuffled.end()};
-
-    algo::insertion_sort(given);
-
-    EXPECT_EQ(given, expected);
+    EXPECT_TRUE(ranges::is_sorted(rand_range<std::list>() |
+                                  algo::insertion_sort_ascending));
 }
 
 TEST(Sorting, InsertSort_Descending_Vector)
 {
-    vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
-    std::ranges::reverse(expected);
-    vector<int> given{expected};
-
-    mt19937 gen{seed}; // NOLINT
-
-    shuffle(given, gen);
-
-    algo::insertion_sort(given, greater<>{});
-
-    EXPECT_EQ(given, expected);
+    EXPECT_TRUE(
+        ranges::is_sorted(rand_range<>() | algo::insertion_sort_decending,
+                          algo::insertion_sort.decending));
 }
 
 TEST(Sorting, InsertSort_Descending_List)
 {
-    const list expected{9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
-    vector<int> shuffled{expected.begin(), expected.end()};
-
-    mt19937 gen{seed}; // NOLINT
-
-    shuffle(shuffled, gen);
-
-    list<int> given{shuffled.begin(), shuffled.end()};
-
-    algo::insertion_sort(given, greater<>{});
-
-    EXPECT_EQ(given, expected);
+    EXPECT_TRUE(ranges::is_sorted(rand_range<std::list>() |
+                                      algo::insertion_sort_decending,
+                                  algo::insertion_sort.decending));
 }
 
 TEST(Sorting, MergeSort_Ascending_Vector)
@@ -131,65 +93,26 @@ TEST(Sorting, MergeSort_Descending_Vector)
 
 TEST(Sorting, BubbleSort_Ascending_Vector)
 {
-    vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
-    vector<int> given{expected};
-
-    mt19937 gen{seed}; // NOLINT
-
-    shuffle(given, gen);
-
-    algo::bubble_sort(given);
-
-    EXPECT_EQ(given, expected);
+    EXPECT_TRUE(
+        ranges::is_sorted(rand_range<>() | algo::bubble_sort_ascending));
 }
 
 TEST(Sorting, BubbleSort_Ascending_List)
 {
-    const list expected{0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
-    vector<int> shuffled{expected.begin(), expected.end()};
-
-    mt19937 gen{seed}; // NOLINT
-
-    shuffle(shuffled, gen);
-
-    list<int> given{shuffled.begin(), shuffled.end()};
-
-    algo::bubble_sort(given);
-
-    EXPECT_EQ(given, expected);
+    EXPECT_TRUE(ranges::is_sorted(rand_range<std::list>() |
+                                  algo::bubble_sort_ascending));
 }
 
 TEST(Sorting, BubbleSort_Descending_Vector)
 {
-    vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
-    std::ranges::reverse(expected);
-    vector<int> given{expected};
-
-    mt19937 gen{seed}; // NOLINT
-
-    shuffle(given, gen);
-
-    algo::bubble_sort(given, std::less<>{});
-
-    EXPECT_EQ(given, expected);
+    EXPECT_TRUE(
+        ranges::is_sorted(rand_range<>() | algo::bubble_sort_decending));
 }
 
 TEST(Sorting, BubbleSort_Descending_List)
 {
-    const list expected{9, 8, 7, 6, 5, 4, 3, 2, 1, 0};
-    vector<int> shuffled{expected.begin(), expected.end()};
-
-    mt19937 gen{seed}; // NOLINT
-
-    shuffle(shuffled, gen);
-
-    list<int> given{shuffled.begin(), shuffled.end()};
-
-    algo::bubble_sort(given, std::less<>{});
-
-    EXPECT_EQ(given, expected);
+    EXPECT_TRUE(ranges::is_sorted(rand_range<std::list>() |
+                                  algo::bubble_sort_decending));
 }
 
 TEST(Sorting, HeapSort_Ascending_Vector)
@@ -412,85 +335,43 @@ TEST(Sorting, TreeSort_Descending_Vector)
 
 TEST(Sorting, BlockSort_Ascending_Vector)
 {
-    vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
-    vector<int> given{expected};
-
-    mt19937 gen{seed}; // NOLINT
-
-    shuffle(given, gen);
-
-    EXPECT_EQ(std::move(given) | algo::block_sort_ascending, expected);
+    EXPECT_TRUE(
+        ranges::is_sorted(rand_range<>() | algo::block_sort_ascending,
+                          algo::block_sort.ascending));
 }
 
 TEST(Sorting, BlockSort_Descending_Vector)
 {
-    vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
-    std::ranges::reverse(expected);
-    vector<int> given{expected};
-
-    mt19937 gen{seed}; // NOLINT
-
-    shuffle(given, gen);
-
-    EXPECT_EQ(std::move(given) | algo::block_sort_decending, expected);
+    EXPECT_TRUE(
+        ranges::is_sorted(rand_range<>() | algo::block_sort_decending,
+                          algo::block_sort.decending));
 }
 
 TEST(Sorting, BlockSort_Ascending_NoCache_Vector)
 {
-    vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
-    vector<int> given{expected};
-
-    mt19937 gen{seed}; // NOLINT
-
-    shuffle(given, gen);
-
-    EXPECT_EQ(std::move(given) | algo::block_sort_ascending(0), expected);
+    EXPECT_TRUE(
+        ranges::is_sorted(rand_range<>() | algo::block_sort_ascending(0),
+                          algo::block_sort.ascending));
 }
 
 TEST(Sorting, BlockSort_Descending_NoCache_Vector)
 {
-    vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
-    std::ranges::reverse(expected);
-    vector<int> given{expected};
-
-    mt19937 gen{seed}; // NOLINT
-
-    shuffle(given, gen);
-
-    EXPECT_EQ(std::move(given) | algo::block_sort_decending(0), expected);
+    EXPECT_TRUE(
+        ranges::is_sorted(rand_range<>() | algo::block_sort_decending(0),
+                          algo::block_sort.decending));
 }
 
 TEST(Sorting, BlockSort_Ascending_SmallCache_Vector)
 {
-    vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
-    vector<int> given{expected};
-
-    mt19937 gen{seed}; // NOLINT
-
-    shuffle(given, gen);
-
-    EXPECT_EQ(std::move(given) | algo::block_sort_ascending(
-                                     ranges::size(expected) / 4 + 1),
-              expected);
+    EXPECT_TRUE(ranges::is_sorted(
+        rand_range<>() | algo::block_sort_ascending(range_size / 4 + 1),
+        algo::block_sort.ascending));
 }
 
 TEST(Sorting, BlockSort_Descending_SmallCache_Vector)
 {
-    vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
-    std::ranges::reverse(expected);
-    vector<int> given{expected};
 
-    mt19937 gen{seed}; // NOLINT
-
-    shuffle(given, gen);
-
-    EXPECT_EQ(std::move(given) | algo::block_sort_decending(
-                                     ranges::size(expected) / 4 + 1),
-              expected);
+    EXPECT_TRUE(ranges::is_sorted(
+        rand_range<>() | algo::block_sort_decending(range_size / 4 + 1),
+        algo::block_sort.decending));
 }

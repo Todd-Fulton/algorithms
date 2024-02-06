@@ -89,7 +89,7 @@ TEST(Searching, BinarySearchRandom_List)
                  given.emplace_back(val_distrib(gen));
              });
 
-    algo::insertion_sort(given);
+    given = std::move(given) | algo::insertion_sort();
 
     auto rand_idx = idx_distrib(gen);
 
