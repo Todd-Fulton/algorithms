@@ -14,11 +14,7 @@ Hover:
 If:
     PathMatch: .*\.hpp
 CompileFlags:
-    Add: [-isystem/home/todd/source/lynx/lynx/include,
-          -isystem/home/todd/source/lynx/meta/include,
-          -isystem/home/todd/source/lynx/build/lynx/include,
-          -isystem/home/todd/source/lynx/build/vcpkg_installed/x64-linux/include,
-          -std=c++2c,
+    Add: [-std=c++2c,
           -Wall,
           -Wextra,
           -Wshadow,
@@ -34,19 +30,15 @@ CompileFlags:
           -Wdouble-promotion,
           -Wformat=2,
           -Wimplicit-fallthrough]
-    Remove: -I*
 Diagnostics:
     ClangTidy:
-        Add: [
-            'modernize-*',
+        Add: ['modernize-*',
             'readability-*',
             'cppcoreguidelines-*',
             'hicupp-*',
             'performance-*',
-            'bugprone-*'
-        ]
-        Remove: [
-            'abseil-*',
+            'bugprone-*']
+        Remove: ['abseil-*',
             'altera-*',
             'android-*',
             'fuchsia-*',
@@ -77,5 +69,4 @@ Diagnostics:
             'cppcoreguidelines-special-member-functions',
             'hicpp-special-member-functions',
             '*-noexcept-*',
-            '*-std-forward'
-        ]
+            '*-std-forward']
