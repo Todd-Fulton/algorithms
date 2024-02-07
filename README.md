@@ -37,7 +37,20 @@ cmake --build .
 ```
 
 ### TODO: 
-- Other build options
-- using custom toolchain/c++ std library
+- Documentation
+  [ ] Other build options
+  [ ] Using custom toolchain/c++ std library
+  [ ] Generate Docs
+
+- Code
+  [WIP] Convert code to cpo's using tag_invoke
+  [WIP] Make algorithms pipable
+  [WIP] Make algorithms customizable
+      e.g. QuickSort can use different partition schemes
+  [ ] Parallel algorithms using libunifex
+
+- Building
+  [ ] Start using libc++ hardening features
+  [ ] Cleanup cmake scripts
 
 
