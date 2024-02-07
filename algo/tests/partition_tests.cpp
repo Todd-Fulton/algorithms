@@ -20,40 +20,44 @@ TEST(Partitions, LomutoPartition_vector_int)
 {
     constexpr auto pred = [](auto const& x) { return x <= 20; };
 
-    EXPECT_TRUE(
-        ranges::is_partitioned(std::get<1>(rand_range<vector>(0, 50) |
-                                           algo::lomuto_partition(pred)),
-                               pred));
+    EXPECT_TRUE(ranges::is_partitioned(
+        std::get<1>(rand_range<vector>(0, 50) | algo::lomuto_partition(pred)),
+        pred));
 }
 
 TEST(Partitions, LomutoPartition_list_int)
 {
     constexpr auto pred = [](auto const& x) { return x <= 20; };
 
-    EXPECT_TRUE(
-        ranges::is_partitioned(std::get<1>(rand_range<list>(0, 50) |
-                                           algo::lomuto_partition(pred)),
-                               pred));
+    EXPECT_TRUE(ranges::is_partitioned(
+        std::get<1>(rand_range<list>(0, 50) | algo::lomuto_partition(pred)), pred));
 }
 
 TEST(Partitions, BranchlessLomutoPartition_vector_int)
 {
     constexpr auto pred = [](auto const& x) { return x <= 20; };
 
-    EXPECT_TRUE(ranges::is_partitioned(
-        std::get<1>(rand_range<vector>(0, 50) |
-                    algo::branchless_lomuto_partition(pred)),
-        pred));
+    EXPECT_TRUE(
+        ranges::is_partitioned(std::get<1>(rand_range<vector>(0, 50) |
+                                           algo::branchless_lomuto_partition(pred)),
+                               pred));
 }
 
 TEST(Partitions, HoarePartition_vector_int)
 {
     constexpr auto pred = [](auto const& x) { return x <= 20; };
 
-    EXPECT_TRUE(
-        ranges::is_partitioned(std::get<1>(rand_range<vector>(0, 50) |
-                                           algo::hoare_partition(pred)),
-                               pred));
+    EXPECT_TRUE(ranges::is_partitioned(
+        std::get<1>(rand_range<vector>(0, 50) | algo::hoare_partition(pred)), pred));
+}
+
+TEST(Partitions, HoarePartition_vector_int_iterators)
+{
+    constexpr auto pred = [](auto const& x) { return x <= 20; };
+
+    auto given = rand_range<>(-20, 20);
+    algo::hoare_partition(begin(given), end(given), pred);
+    EXPECT_TRUE(ranges::is_partitioned(given, pred));
 }
 
 TEST(Partitions, AlexandrescuPartition_vector_int)
@@ -61,8 +65,7 @@ TEST(Partitions, AlexandrescuPartition_vector_int)
     constexpr auto pred = [](auto const& x) { return x <= 20; };
 
     EXPECT_TRUE(ranges::is_partitioned(
-        std::get<1>(rand_range<vector>(0, 50) |
-                    algo::alexandrescu_partition(pred)),
+        std::get<1>(rand_range<vector>(0, 50) | algo::alexandrescu_partition(pred)),
         pred));
 }
 
@@ -91,8 +94,7 @@ TEST(Partitions, AlexandrescuPartition_vector_int_Degenerate)
     ranges::iter_swap(begin(range), prev(end(range)));
 
     EXPECT_TRUE(ranges::is_partitioned(
-        std::get<1>(ranges::views::all(range) |
-                    algo::alexandrescu_partition(pred)),
+        std::get<1>(ranges::views::all(range) | algo::alexandrescu_partition(pred)),
         pred));
 
     auto new_pivot = ranges::partition_point(range, pred);

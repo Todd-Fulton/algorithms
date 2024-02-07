@@ -21,35 +21,41 @@
 #include <range/v3/algorithm/find_if.hpp>
 #include <range/v3/algorithm/find_if_not.hpp>
 #include <range/v3/algorithm/reverse.hpp>
+#include <range/v3/functional/concepts.hpp>
 #include <range/v3/iterator/concepts.hpp>
+#include <range/v3/range/concepts.hpp>
 #include <range/v3/range_concepts.hpp>
 
+#include <unifex/tag_invoke.hpp>
+
 #include <cassert>
+#include <iterator>
 
 #include <algo/prelude.hpp>
+
+#define ITR_VALUE_T(itr) std::iter_value_t<decltype(itr)>
+#define REMOVE_CVREF_T(var) std::remove_cvref_t<decltype(var)>
 
 namespace algo
 {
 namespace _hoare_partition
 {
+template <std::bidirectional_iterator Iter1, std::bidirectional_iterator Iter2>
 constexpr auto
-algorithm(auto range, auto&& predicate, auto&& projection) noexcept(
-    std::is_nothrow_move_assignable_v<RNG_VALUE_T(range)> and
-    std::is_nothrow_invocable_v<decltype(projection),
-                                RNG_VALUE_T(range)> and
+algorithm(Iter1 first, Iter2 last, auto&& predicate, auto&& projection) noexcept(
+    std::is_nothrow_move_assignable_v<ITR_VALUE_T(first)> and
+    std::is_nothrow_invocable_v<decltype(projection), ITR_VALUE_T(first)> and
     std::is_nothrow_invocable_v<
         decltype(predicate),
-        std::invoke_result_t<decltype(projection), RNG_VALUE_T(range)>>)
-    -> std::pair<RNG_ITR_T(range), std::remove_cvref_t<decltype(range)>>
+        std::invoke_result_t<decltype(projection), ITR_VALUE_T(first)>>) -> Iter1
 {
-    std::pair<RNG_ITR_T(range), std::remove_cvref_t<decltype(range)>> ret;
-
-    if (ranges::size(range) < 2) {
-        ret = std::make_pair(begin(range), std::move(range));
+    Iter1 ret = last;
+    if (ranges::distance(first, last) < 2) {
+        ret = last;
     }
     else {
-        auto low = begin(range);
-        auto high = prev(end(range));
+        auto low = first;
+        auto high = prev(last);
 
         while (true) {
             while (predicate(projection(*low)) and low < high) {
@@ -67,10 +73,10 @@ algorithm(auto range, auto&& predicate, auto&& projection) noexcept(
                 if (predicate(projection(*low))) {
                     ++low;
                 }
-                if (low < end(range)) {
-                    ranges::iter_swap(low, prev(end(range)));
+                if (low < last) {
+                    ranges::iter_swap(low, prev(last));
                 }
-                ret = std::make_pair(std::move(low), std::move(range));
+                ret = low;
                 break;
             }
         }
@@ -85,46 +91,172 @@ struct _adapter
 };
 
 template <class Predicate, class Projection>
-using adapter =
-    _adapter<std::decay_t<Predicate>, std::decay_t<Projection>>::type;
+using adapter = _adapter<std::decay_t<Predicate>, std::decay_t<Projection>>::type;
 
 namespace _cpo
 {
 
 struct _fn
 {
-    template <ranges::random_access_range Range,
+    /**
+     * @brief Partition `range` according to predicate.
+     *
+     * This function takes a range by value. If you need
+     * to permute a range by reference, use a view instead,
+     * for example `ranges::all` or `ranges::subrange`.
+     *
+     * Computes the partition around predicate(x) -> true
+     * using Hoare's partition scheme.
+     *
+     * Ex: [0, 2, 10, 2, 5, 9, 6, 8, 7, 3]
+     *  is permuted to [0, 2, 3, 2, 5 * 6, 8, 7, 10, 9]
+     *  around the predicate (x < 6)
+     *
+     *  A partition function may be supplied to, for example,
+     *  project into a tuple or a structure.
+     *
+     * Ex: snd(x : tuple<int, float>) -> float
+     *
+     * @tparam Range A container type satisfying the bidirectional_range concept
+     * @tparam Predicate A unary function of type T -> bool
+     * @tparam Projection A unary function of type T -> U
+     *
+     * @param range A range of type `Range`
+     * @param predicate The function to discriminate between predecessor and
+     * successor elements in `range`
+     * @param projection A function to "project into" elements of `range`
+     * defaults to the identity function id(x) -> x
+     *
+     * @return a pair (iterator, range) where the iterator points to the
+     * element where successor elements begin.
+     */
+    template <ranges::bidirectional_range Range,
               class Predicate,
               class Projection = ranges::identity>
-    static constexpr auto operator()(Range&& range,
-                                     Predicate&& predicate,
-                                     Projection&& projection = {})
+    requires ranges::indirect_unary_predicate<
+        Predicate,
+        ranges::projected<ranges::iterator_t<Range>, Projection>>
+    constexpr auto operator()(Range&& range,
+                              Predicate&& predicate,
+                              Projection&& projection = {}) const
     {
-        return algorithm(FWD(range), FWD(predicate), FWD(projection));
+        return tag_invoke(*this, FWD(range), FWD(predicate), FWD(projection));
     }
 
+    /**
+     * @brief Partition a range of elements according to predicate.
+     *
+     * Computes the partition around predicate(x) -> true
+     * using Hoare's partition scheme.
+     *
+     * Ex: [0, 2, 10, 2, 5, 9, 6, 8, 7, 3]
+     *  is permuted to [0, 2, 3, 2, 5 * 6, 8, 7, 10, 9]
+     *  around the predicate (x < 6)
+     *
+     *  A partition function may be supplied to, for example,
+     *  project into a tuple or a structure.
+     *
+     * Ex: snd(x : tuple<int, float>) -> float
+     *
+     * @tparam Iter1 An iterator type satisfying the bidirectional_range concept
+     * @tparam Iter2 An iterator type satisfying the bidirectional_range concept
+     * @tparam Predicate A unary function of type T -> bool
+     * @tparam Projection A unary function of type T -> U
+     *
+     * @param first An iterator pointing to the first element in the range.
+     * @param last An iterator pointing to the last element in the range.
+     * @param predicate The function to discriminate between predecessor and
+     * successor elements in `range`
+     * @param projection A function to "project into" elements of `range`
+     * defaults to the identity function id(x) -> x
+     *
+     * @return an iterator where the iterator points to the
+     * element where successor elements begin.
+     */
+    template <std::bidirectional_iterator Iter1,
+              std::bidirectional_iterator Iter2,
+              class Predicate,
+              class Projection = ranges::identity>
+    requires ranges::indirect_unary_predicate<Predicate,
+                                              ranges::projected<Iter1, Projection>>
+    constexpr auto operator()(Iter1&& first,
+                              Iter2&& last,
+                              Predicate&& predicate,
+                              Projection&& projection = {}) const
+    {
+        return tag_invoke(
+            *this, FWD(first), FWD(last), FWD(predicate), FWD(projection));
+    }
     template <class Predicate, class Projection = std::identity>
     requires(!ranges::range<Predicate>)
     static constexpr auto operator()(Predicate&& predicate,
                                      Projection&& projection = {})
     {
-        return adapter<Predicate, Projection>{FWD(predicate),
-                                              FWD(projection)};
+        return adapter<Predicate, Projection>{FWD(predicate), FWD(projection)};
     }
 
 private:
+    template <ranges::bidirectional_range Range,
+              class Predicate,
+              class Projection = ranges::identity>
+    requires ranges::indirect_unary_predicate<
+                 Predicate,
+                 ranges::projected<ranges::iterator_t<Range>, Projection>>
     friend constexpr auto tag_invoke(
-        _fn const& f,
-        ranges::random_access_range auto&& range,
-        auto&& predicate,
-        auto&& projection = std::identity{})
+        _fn const& /*f*/,
+        Range&& range,
+        Predicate&& predicate,
+        Projection&& projection =
+            std::identity{}) noexcept(noexcept(std::pair(algorithm(begin(range),
+                                                                   end(range),
+                                                                   FWD(predicate),
+                                                                   FWD(projection)),
+                                                         FWD(range))))
+        -> std::pair<RNG_ITR_T(range), std::remove_cvref_t<Range>>
     {
-        return f(FWD(range), FWD(predicate), FWD(projection));
+        return std::pair(
+            algorithm(begin(range), end(range), FWD(predicate), FWD(projection)),
+            FWD(range));
+    }
+
+    template <std::bidirectional_iterator Iter1,
+              std::bidirectional_iterator Iter2,
+              class Predicate,
+              class Projection = ranges::identity>
+    requires ranges::indirect_unary_predicate<Predicate,
+                                              ranges::projected<Iter1, Projection>>
+    friend constexpr auto tag_invoke(
+        _fn const& /*f*/,
+        Iter1&& first,
+        Iter2&& last,
+        Predicate&& predicate,
+        Projection&& projection =
+            std::identity{}) noexcept(noexcept(algorithm(FWD(first),
+                                                         FWD(last),
+                                                         FWD(predicate),
+                                                         FWD(projection)))) -> Iter1
+    {
+        return algorithm(FWD(first), FWD(last), FWD(predicate), FWD(projection));
     }
 };
 } // namespace _cpo
 } // namespace _hoare_partition
 
+/**
+ * Partition a range of elements according to predicate.
+ *
+ * Computes the partition around predicate(x) -> true
+ * using Hoare's partition scheme.
+ *
+ * Ex: [0, 2, 10, 2, 5, 9, 6, 8, 7, 3]
+ *  is permuted to [0, 2, 3, 2, 5 * 6, 8, 7, 10, 9]
+ *  around the predicate (x < 6)
+ *
+ *  A partition function may be supplied to, for example,
+ *  project into a tuple or a structure.
+ *
+ * Ex: snd(x : tuple<int, float>) -> float
+ */
 constexpr auto hoare_partition = _hoare_partition::_cpo::_fn{};
 
 namespace _hoare_partition
@@ -149,12 +281,9 @@ struct _adapter<Predicate, Projection>::type
 namespace _alexandrescu_partition
 {
 
-// TODO: Can be used with bidirectional_iterator
-constexpr auto
-algorithm(auto range, auto&& predicate, auto&& projection) noexcept(
+constexpr auto algorithm(auto range, auto&& predicate, auto&& projection) noexcept(
     std::is_nothrow_move_assignable_v<RNG_VALUE_T(range)> and
-    std::is_nothrow_invocable_v<decltype(projection),
-                                RNG_VALUE_T(range)> and
+    std::is_nothrow_invocable_v<decltype(projection), RNG_VALUE_T(range)> and
     std::is_nothrow_invocable_v<
         decltype(predicate),
         std::invoke_result_t<decltype(projection), RNG_VALUE_T(range)>>)
@@ -205,7 +334,7 @@ algorithm(auto range, auto&& predicate, auto&& projection) noexcept(
 
         *predecessor = std::move(original_succ);
     }
-    return std::make_pair(std::move(predecessor, std::move(range)));
+    return std::pair(std::move(predecessor, std::move(range)));
 }
 
 template <class Predicate, class Projection>
@@ -215,8 +344,7 @@ struct _adapter
 };
 
 template <class Predicate, class Projection>
-using adapter =
-    _adapter<std::decay_t<Predicate>, std::decay_t<Projection>>::type;
+using adapter = _adapter<std::decay_t<Predicate>, std::decay_t<Projection>>::type;
 
 namespace _cpo
 {
@@ -237,16 +365,14 @@ struct _fn
     static constexpr auto operator()(Predicate&& predicate,
                                      Projection&& projection = {})
     {
-        return adapter<Predicate, Projection>{FWD(predicate),
-                                              FWD(projection)};
+        return adapter<Predicate, Projection>{FWD(predicate), FWD(projection)};
     }
 
 private:
-    friend constexpr auto tag_invoke(
-        _fn const& f,
-        ranges::random_access_range auto&& range,
-        auto&& predicate,
-        auto&& projection = std::identity{})
+    friend constexpr auto tag_invoke(_fn const& f,
+                                     ranges::random_access_range auto&& range,
+                                     auto&& predicate,
+                                     auto&& projection = std::identity{})
     {
         return f(FWD(range), FWD(predicate), FWD(projection));
     }
@@ -254,8 +380,7 @@ private:
 } // namespace _cpo
 } // namespace _alexandrescu_partition
 
-constexpr auto alexandrescu_partition =
-    _alexandrescu_partition::_cpo::_fn{};
+constexpr auto alexandrescu_partition = _alexandrescu_partition::_cpo::_fn{};
 
 namespace _alexandrescu_partition
 {
