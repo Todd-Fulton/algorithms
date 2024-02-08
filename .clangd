@@ -14,7 +14,7 @@ Hover:
 If:
     PathMatch: .*\.hpp
 CompileFlags:
-    Add: [-std=c++2c,
+    Add: [-std=c++26,
           -Wall,
           -Wextra,
           -Wshadow,
