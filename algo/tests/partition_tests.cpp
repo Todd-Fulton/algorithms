@@ -1,4 +1,7 @@
 
+#include <fmt/core.h>
+#include <fmt/ranges.h>
+
 #include <gtest/gtest.h>
 
 #include <algo/partition.hpp>
@@ -62,22 +65,39 @@ TEST(Partitions, HoarePartition_vector_int_iterators)
 
 TEST(Partitions, AlexandrescuPartition_vector_int)
 {
-    constexpr auto pred = [](auto const& x) { return x <= 20; };
+    constexpr auto pred = [](auto const& x) { return x <= 25; };
 
-    EXPECT_TRUE(ranges::is_partitioned(
-        std::get<1>(rand_range<vector>(0, 50) | algo::alexandrescu_partition(pred)),
-        pred));
+    auto rrand = rand_range<>(0, 50);
+    auto original = rrand;
+
+    auto [part, output] = original | algo::alexandrescu_partition(pred);
+
+    auto is_partitioned = ranges::is_partitioned(output, pred);
+
+    EXPECT_TRUE(is_partitioned);
+    if (!is_partitioned) {
+        fmt::print("Original: {}\n\n", original);
+        fmt::print("Output:   {}\n\n", output);
+    }
 }
 
 TEST(Partitions, AlexandrescuPartition_vector_int_Already_Partitioned)
 {
-    constexpr auto pred = [](auto const& x) { return x <= 20; };
+    constexpr auto pred = [](auto const& x) { return x <= 25; };
 
-    EXPECT_TRUE(ranges::is_partitioned(
-        std::get<1>(std::get<1>(rand_range<vector>(0, 50) |
-                                algo::alexandrescu_partition(pred)) |
-                    algo::alexandrescu_partition(pred)),
-        pred));
+    auto rrand = rand_range<>(0, 50);
+    auto original = rrand;
+
+    auto [_, output] = original | algo::alexandrescu_partition(pred);
+    algo::alexandrescu_partition(begin(output), end(output), pred);
+
+    auto is_partitioned = ranges::is_partitioned(output, pred);
+
+    EXPECT_TRUE(is_partitioned);
+    if (!is_partitioned) {
+        fmt::print("Original: {}\n\n", original);
+        fmt::print("Output:   {}\n\n", output);
+    }
 }
 
 TEST(Partitions, AlexandrescuPartition_vector_int_Degenerate)
@@ -99,7 +119,8 @@ TEST(Partitions, AlexandrescuPartition_vector_int_Degenerate)
 
     auto new_pivot = ranges::partition_point(range, pred);
 
-    EXPECT_EQ(expected_pivot, new_pivot);
+    EXPECT_EQ(ranges::distance(ranges::begin(range), expected_pivot),
+              ranges::distance(ranges::begin(range), new_pivot));
 
     ranges::sort(begin(range), new_pivot);
     ranges::sort(new_pivot, end(range));

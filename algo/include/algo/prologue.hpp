@@ -21,3 +21,5 @@
 #undef RNG_VALUE_T
 #undef RNG_ITR_T
 #undef ASSUME
+#undef ALGO_BUILD_DEBUG
+

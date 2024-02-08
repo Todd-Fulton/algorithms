@@ -15,6 +15,7 @@
  *License along with this program.  If not, see
  *<https://www.gnu.org/licenses/>.
  **/
+
 #include <utility>
 
 #define FWD(x) std::forward<decltype(x)>(x)
@@ -24,12 +25,26 @@
 #if defined(__clang__)
 #define ASSUME(expr) __builtin_assume(expr)
 #elif defined(__GNUC__) && !defined(__ICC)
-#define ASSUME(expr)                                                      \
-    if (expr) {}                                                          \
-    else {                                                                \
-        __builtin_unreachable();                                          \
+#define ASSUME(expr)                                                                \
+    if (expr) {}                                                                    \
+    else {                                                                          \
+        __builtin_unreachable();                                                    \
     }
 #elif defined(_MSC_VER) || defined(__ICC)
 #define ASSUME(expr) __assume(expr)
+#endif
+
+// Only one or the other, but not both
+#if (defined(DEBUG) || defined(_DEBUG)) && (defined(NDEBUG) || defined(_NDEBUG))
+#error Both DEBUG and NDEBUG are defined.
+#endif
+
+// The only time we switch to debug is when asked.
+// NDEBUG or {nothing} results
+// in release build (fewer surprises at runtime).
+#if defined(DEBUG) || defined(_DEBUG)
+#define ALGO_BUILD_DEBUG 1
+#else
+#define ALGO_BUILD_RELEASE 1
 #endif
 

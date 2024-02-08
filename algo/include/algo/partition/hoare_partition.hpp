@@ -26,6 +26,7 @@
 #include <range/v3/range/concepts.hpp>
 #include <range/v3/range_concepts.hpp>
 
+#include <range/v3/view/reverse.hpp>
 #include <unifex/tag_invoke.hpp>
 
 #include <cassert>
@@ -187,7 +188,7 @@ struct _fn
         return tag_invoke(
             *this, FWD(first), FWD(last), FWD(predicate), FWD(projection));
     }
-    template <class Predicate, class Projection = std::identity>
+    template <class Predicate, class Projection = ranges::identity>
     requires(!ranges::range<Predicate>)
     static constexpr auto operator()(Predicate&& predicate,
                                      Projection&& projection = {})
@@ -200,14 +201,14 @@ private:
               class Predicate,
               class Projection = ranges::identity>
     requires ranges::indirect_unary_predicate<
-                 Predicate,
-                 ranges::projected<ranges::iterator_t<Range>, Projection>>
+        Predicate,
+        ranges::projected<ranges::iterator_t<Range>, Projection>>
     friend constexpr auto tag_invoke(
         _fn const& /*f*/,
         Range&& range,
         Predicate&& predicate,
         Projection&& projection =
-            std::identity{}) noexcept(noexcept(std::pair(algorithm(begin(range),
+            ranges::identity{}) noexcept(noexcept(std::pair(algorithm(begin(range),
                                                                    end(range),
                                                                    FWD(predicate),
                                                                    FWD(projection)),
@@ -231,7 +232,7 @@ private:
         Iter2&& last,
         Predicate&& predicate,
         Projection&& projection =
-            std::identity{}) noexcept(noexcept(algorithm(FWD(first),
+            ranges::identity{}) noexcept(noexcept(algorithm(FWD(first),
                                                          FWD(last),
                                                          FWD(predicate),
                                                          FWD(projection)))) -> Iter1
@@ -268,9 +269,20 @@ struct _adapter<Predicate, Projection>::type
     Predicate pred_;
     Projection proj_;
 
-    template <class Adapter, ranges::random_access_range Range>
-    requires std::same_as<std::remove_cvref_t<Adapter>, type>
-    constexpr friend auto operator|(Range&& range, Adapter&& self)
+    template <class Adapter, ranges::bidirectional_range Range>
+    requires std::same_as<std::remove_cvref_t<Adapter>, type> and
+             ranges::indirect_unary_predicate<
+                 Predicate,
+                 ranges::projected<ranges::iterator_t<Range>, Projection>>
+    constexpr friend auto operator|(Range&& range, Adapter&& self) noexcept(
+        unifex::is_nothrow_tag_invocable_v<unifex::tag_t<hoare_partition>,
+                                           Range,
+                                           decltype(FWD(self).pred_),
+                                           decltype(FWD(self).proj_)>)
+        -> unifex::tag_invoke_result_t<unifex::tag_t<hoare_partition>,
+                                       Range,
+                                       decltype(FWD(self).pred_),
+                                       decltype(FWD(self).proj_)>
     {
         return tag_invoke(
             hoare_partition, FWD(range), FWD(self).pred_, FWD(self).proj_);
@@ -281,60 +293,104 @@ struct _adapter<Predicate, Projection>::type
 namespace _alexandrescu_partition
 {
 
-constexpr auto algorithm(auto range, auto&& predicate, auto&& projection) noexcept(
-    std::is_nothrow_move_assignable_v<RNG_VALUE_T(range)> and
-    std::is_nothrow_invocable_v<decltype(projection), RNG_VALUE_T(range)> and
-    std::is_nothrow_invocable_v<
-        decltype(predicate),
-        std::invoke_result_t<decltype(projection), RNG_VALUE_T(range)>>)
-    -> std::pair<RNG_ITR_T(range), std::remove_cvref_t<decltype(range)>>
+/**
+ * @brief Alexandrescu partition scheme using sentinals
+ *
+ * Preconditions:
+ *   - Types held by the container must be in a valid
+ *   state after a move operation and the predicate/projection
+ *   combination must be able to handle such a case and do the
+ *   appropriate thing. Typically, a moved from value should be
+ *   less than all other values.
+ *
+ * @tparam Predicate [TODO:tparam]
+ * @tparam Projection [TODO:tparam]
+ * @param range [TODO:parameter]
+ * @param predicate [TODO:parameter]
+ * @param projection [TODO:parameter]
+ * @return [TODO:return]
+ */
+template <std::contiguous_iterator Iter1,
+          std::contiguous_iterator Iter2,
+          class Predicate,
+          class Projection>
+constexpr auto algorithm(
+    Iter1 first,
+    Iter2 last,
+    Predicate&& predicate,
+    Projection&&
+        projection) noexcept(std::
+                                 is_nothrow_move_assignable_v<
+                                     std::iter_value_t<Iter1>> and
+                             std::is_nothrow_invocable_v<
+                                 Projection,
+                                 std::iter_value_t<Iter1>> and
+                             std::is_nothrow_invocable_v<
+                                 Predicate,
+                                 std::invoke_result_t<Projection,
+                                                      std::iter_value_t<Iter1>>>)
+    -> Iter1
 {
-    auto predecessor = ranges::find_if_not(range, predicate, projection);
-    auto successor = prev(end(range));
-    if (predecessor < successor) {
 
-        auto original_succ = *predecessor; // copy
+    // Find start positions
+    while (first != last and predicate(projection(*first))) {
+        ++first;
+    }
+    while (last != first and !predicate(projection(*(--last)))) {}
 
+    if (first < last) {
         // ensure while loops terminate with predicate
-        ranges::iter_swap(predecessor, successor);
+        ranges::iter_swap(first, last);
 
+        // copy
+        auto original_succ = *last;
+
+        // now we can loop without checking bounds
         while (true) {
 
             // find next successor value
+            // NOTE: this may evaluate a moved-from value located at
+            // `successor` after the first iteration
             do { // NOLINT *do*
-                ++predecessor;
-            } while (predicate(projection(*predecessor)));
+                ++first;
+            } while (predicate(projection(*first)));
 
-            // overwrite the old terminal node with new successor value
-            *successor = ranges::iter_move(predecessor);
+            // NOTE: if predecessor >= successor, we have evaluated a moved from
+            // value
+
+            *last = ranges::iter_move(first);
+            // hole is now at predecessor
 
             // find next predecessor value
             // NOTE: this may evaluate a moved-from value located at
             // `predecessor`
             do { // NOLINT *do*
-                --successor;
-            } while (!predicate(projection(*successor)));
+                --last;
+            } while (!predicate(projection(*last)));
 
             // NOTE: we may have moved passed the moved from value
-            if (predecessor >= successor) {
+            // if a moved-from value is evaluated as a predecessor.
+            // To fix this, use copies instead of moves.
+            if (last <= first) {
                 break;
             }
-            // overwrite the old reverse terminal node with new predecessor
-            // value
-            *predecessor = ranges::iter_move(successor);
-        }
-        assert(successor >= ranges::begin(range));
-        assert(ranges::distance(predecessor, successor) < 2);
-        assert(predicate(projection(*successor)));
-        if (predecessor == successor + 2) {
-            assert(!predicate(projection(*(successor + 1))));
-            *predecessor = ranges::iter_move(successor + 1);
-            --predecessor;
+
+            *first = ranges::iter_move(last);
+            // hole is now at successor
         }
 
-        *predecessor = std::move(original_succ);
+        // Handle case where range is already partitioned
+        if (first == last + 2) {
+            ++last;
+            if (predicate(projection(*last))) {
+                *first = ranges::iter_move(last);
+                --first;
+            }
+        }
+
+        *first = std::move(original_succ);
     }
-    return std::pair(std::move(predecessor, std::move(range)));
+    return first;
 }
 
 template <class Predicate, class Projection>
@@ -351,30 +407,93 @@ namespace _cpo
 
 struct _fn
 {
-    template <ranges::random_access_range Range,
+    template <ranges::bidirectional_range Range,
               class Predicate,
               class Projection = ranges::identity>
-    static constexpr auto operator()(Range&& range,
-                                     Predicate&& predicate,
-                                     Projection&& projection = {})
+    requires ranges::indirect_unary_predicate<
+        Predicate,
+        ranges::projected<ranges::iterator_t<Range>, Projection>>
+    constexpr auto operator()(Range&& range,
+                              Predicate&& predicate,
+                              Projection&& projection = {}) const
+        noexcept(
+            unifex::is_nothrow_tag_invocable_v<_fn, Range, Predicate, Projection>)
+            -> unifex::tag_invoke_result_t<_fn, Range, Predicate, Projection>
     {
-        return algorithm(FWD(range), FWD(predicate), FWD(projection));
+        return tag_invoke(*this, FWD(range), FWD(predicate), FWD(projection));
     }
 
-    template <class Predicate, class Projection = std::identity>
+    template <std::contiguous_iterator Iter1,
+              std::contiguous_iterator Iter2,
+              class Predicate,
+              class Projection = ranges::identity>
+    requires ranges::indirect_unary_predicate<Predicate,
+                                              ranges::projected<Iter1, Projection>>
+    constexpr auto operator()(Iter1&& first,
+                              Iter2&& last,
+                              Predicate&& predicate,
+                              Projection&& projection = {}) const
+        noexcept(
+            unifex::
+                is_nothrow_tag_invocable_v<_fn, Iter1, Iter2, Predicate, Projection>)
+            -> unifex::tag_invoke_result_t<_fn, Iter1, Iter2, Predicate, Projection>
+    {
+        return tag_invoke(
+            *this, FWD(first), FWD(last), FWD(predicate), FWD(projection));
+    }
+
+    template <class Predicate, class Projection = ranges::identity>
     static constexpr auto operator()(Predicate&& predicate,
-                                     Projection&& projection = {})
+                                     Projection&& projection = {}) //
+        noexcept(std::is_nothrow_constructible_v<adapter<Predicate, Projection>,
+                                                 Predicate,
+                                                 Projection>)
+            -> adapter<Predicate, Projection>
     {
         return adapter<Predicate, Projection>{FWD(predicate), FWD(projection)};
     }
 
 private:
-    friend constexpr auto tag_invoke(_fn const& f,
-                                     ranges::random_access_range auto&& range,
-                                     auto&& predicate,
-                                     auto&& projection = std::identity{})
+    template <ranges::bidirectional_range Range,
+              class Predicate,
+              class Projection = ranges::identity>
+    requires ranges::indirect_unary_predicate<
+        Predicate,
+        ranges::projected<ranges::iterator_t<Range>, Projection>>
+    friend constexpr auto tag_invoke(
+        _fn const& /*f*/,
+        Range&& range,
+        Predicate&& predicate,
+        Projection&& projection =
+            ranges::identity{}) noexcept(noexcept(algorithm(begin(range),
+                                                         end(range),
+                                                         FWD(predicate),
+                                                         FWD(projection))))
+        -> std::pair<ranges::iterator_t<Range>, std::remove_cvref_t<Range>>
     {
-        return f(FWD(range), FWD(predicate), FWD(projection));
+        return std::pair(
+            algorithm(begin(range), end(range), FWD(predicate), FWD(projection)),
+            FWD(range));
+    }
+
+    template <std::contiguous_iterator Iter1,
+              std::contiguous_iterator Iter2,
+              class Predicate,
+              class Projection = ranges::identity>
+    requires ranges::indirect_unary_predicate<Predicate,
+                                              ranges::projected<Iter1, Projection>>
+    friend constexpr auto tag_invoke(
+        _fn const& /*f*/,
+        Iter1&& first,
+        Iter2 last,
+        Predicate&& predicate,
+        Projection&& projection =
+            ranges::identity{}) noexcept(noexcept(algorithm(FWD(first),
+                                                         FWD(last),
+                                                         FWD(predicate),
+                                                         FWD(projection)))) -> Iter1
+    {
+        return algorithm(FWD(first), FWD(last), FWD(predicate), FWD(projection));
     }
 };
 } // namespace _cpo
@@ -391,12 +510,23 @@ struct _adapter<Predicate, Projection>::type
     Predicate pred_;
     Projection proj_;
 
-    template <class Adapter, ranges::random_access_range Range>
-    requires std::same_as<std::remove_cvref_t<Adapter>, type>
-    constexpr friend auto operator|(Range&& range, Adapter&& self)
+    template <class Adapter, ranges::bidirectional_range Range>
+    requires std::same_as<std::remove_cvref_t<Adapter>, type> and
+             ranges::indirect_unary_predicate<
+                 Predicate,
+                 ranges::projected<ranges::iterator_t<Range>, Projection>>
+    constexpr friend auto operator|(Range&& range, Adapter&& self) noexcept(
+        unifex::is_nothrow_tag_invocable_v<unifex::tag_t<alexandrescu_partition>,
+                                           Range,
+                                           decltype(FWD(self).pred_),
+                                           decltype(FWD(self).proj_)>)
+        -> unifex::tag_invoke_result_t<unifex::tag_t<alexandrescu_partition>,
+                                       Range,
+                                       decltype(FWD(self).pred_),
+                                       decltype(FWD(self).proj_)>
     {
         return tag_invoke(
-            hoare_partition, FWD(range), FWD(self).pred_, FWD(self).proj_);
+            alexandrescu_partition, FWD(range), FWD(self).pred_, FWD(self).proj_);
     }
 };
 } // namespace _alexandrescu_partition
