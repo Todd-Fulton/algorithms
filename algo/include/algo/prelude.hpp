@@ -21,6 +21,9 @@
 #define FWD(x) std::forward<decltype(x)>(x)
 #define RNG_VALUE_T(range) ranges::range_value_t<decltype(range)>
 #define RNG_ITR_T(range) ranges::iterator_t<decltype(range)>
+#define ITR_VALUE_T(itr) std::iter_value_t<decltype(itr)>
+#define REMOVE_CVREF_T(var) std::remove_cvref_t<decltype(var)>
+
 
 #if defined(__clang__)
 #define ASSUME(expr) __builtin_assume(expr)

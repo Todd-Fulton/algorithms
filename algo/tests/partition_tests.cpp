@@ -85,18 +85,18 @@ TEST(Partitions, AlexandrescuPartition_vector_int_Already_Partitioned)
 {
     constexpr auto pred = [](auto const& x) { return x <= 25; };
 
-    auto rrand = rand_range<>(0, 50);
-    auto original = rrand;
+    auto original = rand_range<>(0, 50);
+    auto result = original;
 
-    auto [_, output] = original | algo::alexandrescu_partition(pred);
-    algo::alexandrescu_partition(begin(output), end(output), pred);
+    algo::alexandrescu_partition(begin(result), end(result), pred);
+    algo::alexandrescu_partition(ranges::views::all(result), pred);
 
-    auto is_partitioned = ranges::is_partitioned(output, pred);
+    auto is_partitioned = ranges::is_partitioned(result, pred);
 
     EXPECT_TRUE(is_partitioned);
     if (!is_partitioned) {
         fmt::print("Original: {}\n\n", original);
-        fmt::print("Output:   {}\n\n", output);
+        fmt::print("Result:   {}\n\n", result);
     }
 }
 

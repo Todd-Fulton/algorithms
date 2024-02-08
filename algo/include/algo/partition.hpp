@@ -15,5 +15,6 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  **/
 
-#include "partition/lomuto_partition.hpp"
-#include "partition/hoare_partition.hpp"
+#include <algo/partition/alexandrescu_partition.hpp>
+#include <algo/partition/lomuto_partition.hpp>
+#include <algo/partition/hoare_partition.hpp>
