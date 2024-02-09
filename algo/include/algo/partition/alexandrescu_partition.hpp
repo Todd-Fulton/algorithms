@@ -48,8 +48,8 @@ namespace _alexandrescu_partition
  * @param projection [TODO:parameter]
  * @return [TODO:return]
  */
-template <std::contiguous_iterator Iter1,
-          std::contiguous_iterator Iter2,
+template <std::bidirectional_iterator Iter1,
+          std::bidirectional_iterator Iter2,
           class Predicate,
           class Projection>
 constexpr auto algorithm(
@@ -161,8 +161,8 @@ struct _fn
         return tag_invoke(*this, FWD(range), FWD(predicate), FWD(projection));
     }
 
-    template <std::contiguous_iterator Iter1,
-              std::contiguous_iterator Iter2,
+    template <std::bidirectional_iterator Iter1,
+              std::bidirectional_iterator Iter2,
               class Predicate,
               class Projection = ranges::identity>
     requires ranges::indirect_unary_predicate<Predicate,
@@ -215,8 +215,8 @@ private:
             FWD(range));
     }
 
-    template <std::contiguous_iterator Iter1,
-              std::contiguous_iterator Iter2,
+    template <std::bidirectional_iterator Iter1,
+              std::bidirectional_iterator Iter2,
               class Predicate,
               class Projection = ranges::identity>
     requires ranges::indirect_unary_predicate<Predicate,
