@@ -8,11 +8,15 @@
 
 #include "rand_range.hpp"
 
+#include <range/v3/algorithm/for_each.hpp>
 #include <range/v3/algorithm/is_partitioned.hpp>
 
 #include <list>
 #include <range/v3/algorithm/partition_point.hpp>
 #include <range/v3/algorithm/sort.hpp>
+#include <range/v3/view/chunk.hpp>
+#include <range/v3/view/stride.hpp>
+
 #include <vector>
 
 using std::list;
@@ -56,7 +60,7 @@ TEST(Partitions, HoarePartition_vector_int)
 
 TEST(Partitions, HoarePartition_vector_int_iterators)
 {
-    constexpr auto pred = [](auto const& x) { return x <= 20; };
+    constexpr auto pred = [](auto const& x) { return x <= 10; };
 
     auto given = rand_range<>(-20, 20);
     algo::hoare_partition(begin(given), end(given), pred);
