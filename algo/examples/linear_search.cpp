@@ -17,11 +17,13 @@
 
 #include <algo/search.hpp>
 
-#include <algorithm>
 #include <iostream>
+#include <range/v3/algorithm.hpp>
+#include <range/v3/view/take.hpp>
 #include <vector>
 
-using namespace std;
+using std::cout;
+using std::vector;
 
 int main()
 {
@@ -38,15 +40,14 @@ int main()
         if (itr != std::end(example)) {
 
             cout << "Found number " << *itr
-                 << " at index: " << std::distance(example.begin(), itr)
-                 << ".\n";
+                 << " at index: " << std::distance(example.begin(), itr) << ".\n";
         }
         else {
             cout << "Was not able to find number 4!\n";
         }
     }
     catch (...) {
-        cout << "An exception occured.\n";
+        cout << "An exception occurred.\n";
     }
 
     return 0;
