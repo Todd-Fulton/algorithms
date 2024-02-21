@@ -27,36 +27,6 @@ namespace algo
 namespace _block_sort
 {
 
-template <class Ordering, class T = void>
-struct pred;
-
-template <template <class> class Cmp, class T>
-struct pred<Cmp<T>, T>
-{
-    using type = Cmp<T>;
-};
-
-template <template <class> class Cmp, class T>
-struct pred<Cmp<void>, T>
-{
-    using type = Cmp<T>;
-};
-
-template <class T>
-struct pred<ordering::ascending, T>
-{
-    using type = std::less<T>;
-};
-
-template <class T>
-struct pred<ordering::descending, T>
-{
-    using type = std::greater<T>;
-};
-
-template <class Ordering, class T>
-using pred_t = typename pred<Ordering, T>::type;
-
 constexpr auto adjust_begin(auto& range, auto diff)
 {
     using difference_type =
@@ -1634,9 +1604,6 @@ constexpr struct _fn
         return tag_invoke(_fn{}, FWD(range), FWD(ordering), cache_size);
     }
 
-    _block_sort::pred_t<ordering::descending, void> decending{};
-    _block_sort::pred_t<ordering::ascending, void> ascending{};
-
 private:
     template <class Ordering>
     friend constexpr auto tag_invoke(_fn const& /*unused*/,
@@ -1645,7 +1612,7 @@ private:
                                      auto&& cache_size)
     {
         return algorithm(FWD(range),
-                         pred_t<Ordering, RNG_VALUE_T(range)>{},
+                         predicate_for_t<Ordering, RNG_VALUE_T(range)>{},
                          FWD(cache_size));
     }
 } block_sort;
@@ -1695,7 +1662,7 @@ struct _adapter<Ordering>::type final
 
 } // namespace _block_sort
 constexpr auto block_sort_ascending = block_sort(ordering::ascending{});
-constexpr auto block_sort_decending = block_sort(ordering::descending{});
+constexpr auto block_sort_descending = block_sort(ordering::descending{});
 
 } // namespace algo
 

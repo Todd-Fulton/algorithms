@@ -109,59 +109,6 @@ auto algorithm(Itr start,
 // represents if we should insert before or after
 
 /**
- * @brief  `pred` is a struct that contains a function object for comparing two elements
- * of the same type, depending on the order of the elements. The function object can be
- * used to compare elements in both ascending and descending orders.
- *
- * @tparam Ordering Typically `algo::ordering`, can also be std::less<>, std::greater<>,
- * etc or a custom function object.
- * @tparam T the type the predicate operates on
- */
-template <class Ordering, class T = void>
-struct pred;
-
-template <class Ordering>
-requires(!(std::same_as<Ordering, ordering::ascending> or
-           std::same_as<Ordering, ordering::descending>))
-struct pred<Ordering, void>
-{
-    using type = Ordering;
-};
-
-template <template <class> class Cmp, class T>
-requires(std::invocable<Cmp<T>, T>)
-struct pred<Cmp<T>, T>
-{
-    using type = Cmp<T>;
-};
-
-/** Rebinds Cmp<void> to Cmp<T> */
-template <template <class> class Cmp, class T>
-requires(std::invocable<Cmp<void>, T>)
-struct pred<Cmp<void>, T>
-{
-    using type = Cmp<T>;
-};
-
-/** specifically for ordering::ascending */
-template <class T>
-struct pred<ordering::ascending, T>
-{
-    using type = std::less<T>;
-};
-
-/** specifically for ordering::descending */
-template <class T>
-struct pred<ordering::descending, T>
-{
-    using type = std::greater<T>;
-};
-
-/** using declaration for pred<Ordering, T>::type */
-template <class Ordering, class T>
-using pred_t = typename pred<Ordering, T>::type;
-
-/**
  * `_adapter` is a class template that provides an adapter for binary search algorithms.
  * It has a nested `type` struct that defines the actual adapter type. This adapter type
  * can be used with the `|` operator to pipe a range into a binary search algorithm.
@@ -236,7 +183,7 @@ private:
             return algorithm(ranges::begin(range),
                              ranges::end(range),
                              std::forward<Key>(key),
-                             pred_t<Ordering, RNG_VALUE_T(range)>{});
+                             predicate_for_t<Ordering, RNG_VALUE_T(range)>{});
         }
         else {
 
@@ -244,7 +191,7 @@ private:
             return algorithm(ranges::begin(vi),
                              ranges::end(vi),
                              std::forward<Key>(key),
-                             pred_t<Ordering, RNG_VALUE_T(range)>{});
+                             predicate_for_t<Ordering, RNG_VALUE_T(range)>{});
         }
     }
 
@@ -261,7 +208,7 @@ private:
         return algorithm(std::forward<Itr>(first),
                          std::forward<Sentinel>(end),
                          std::forward<Key>(key),
-                         pred_t<Ordering, ITR_VALUE_T(first)>{});
+                         predicate_for_t<Ordering, ITR_VALUE_T(first)>{});
     }
 } binary_search;
 } // namespace _cpo

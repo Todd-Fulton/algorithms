@@ -18,7 +18,9 @@
 
 #pragma once
 
+#include <range/v3/range/concepts.hpp>
 #include <range/v3/range_concepts.hpp>
+#include <unifex/tag_invoke.hpp>
 
 #include "ordering.hpp"
 
@@ -28,38 +30,8 @@ namespace algo
 namespace _insertion_sort
 {
 
-template <class Ordering, class T = void>
-struct pred;
-
-template <template <class> class Cmp, class T>
-struct pred<Cmp<T>, T>
-{
-    using type = Cmp<T>;
-};
-
-template <template <class> class Cmp, class T>
-struct pred<Cmp<void>, T>
-{
-    using type = Cmp<T>;
-};
-
 template <class T>
-struct pred<ordering::ascending, T>
-{
-    using type = std::less<T>;
-};
-
-template <class T>
-struct pred<ordering::descending, T>
-{
-    using type = std::greater<T>;
-};
-
-template <class Ordering, class T>
-using pred_t = typename pred<Ordering, T>::type;
-
-template <class T>
-decltype(auto) move_or_copy(T&& val)
+auto&& move_or_copy(T&& val)
 {
     if constexpr (std::is_nothrow_move_assignable_v<std::remove_cvref_t<T>>
                   // don't move word size things
@@ -80,28 +52,28 @@ decltype(auto) move_or_copy(T&& val)
  * @param cmp A comparison function. Use less for ascending order and
  * greater for descending order.
  */
-template <std::ranges::forward_range RNG, class CMP = std::less<>>
-requires(std::is_nothrow_swappable_v<std::ranges::range_value_t<RNG>>)
-auto insertion_sort(RNG&& rng, CMP const& /*compare tag*/ = {})
+template <std::forward_iterator Itr,
+          ranges::sentinel_for<Itr> Sentinel,
+          class CMP = std::less<>>
+void algorithm(Itr start, Sentinel end, CMP const& compare = {})
+    noexcept(std::is_nothrow_swappable_v<std::iter_value_t<Itr>>)
 {
-    pred_t<CMP, ranges::range_value_t<decltype(rng)>> const compare{};
-
     using std::swap;
-    if (rng.begin() == rng.end()) {
-        return rng;
+    if (start == end) {
+        return;
     }
 
     // assume range of size 1 on left is sorted
-    auto key_itr = rng.begin();
+    auto key_itr = start;
     ++key_itr;
 
     // TODO: Document loop invariants.
-    for (; key_itr != rng.end(); ++key_itr) {
+    for (; key_itr != end; ++key_itr) {
         // use first element of right range as key to sort into left range
         auto key = move_or_copy(*key_itr);
 
         // find position of key in left range
-        auto i = rng.begin();
+        auto i = start;
         while (!compare(key, *i) and i != key_itr) {
             ++i;
         }
@@ -110,7 +82,7 @@ auto insertion_sort(RNG&& rng, CMP const& /*compare tag*/ = {})
         // TODO: if RNG is contiguous and value_type is trivially
         // relocatable then use memcpy
         if (i != key_itr) {
-            std::ranges::range_value_t<RNG> tmp{move_or_copy(*i)};
+            auto tmp{move_or_copy(*i)};
 
             auto j = i;
             ++j;
@@ -128,73 +100,111 @@ auto insertion_sort(RNG&& rng, CMP const& /*compare tag*/ = {})
         // insert key into i
         swap(key, *i);
     }
-    return rng;
 }
 
-template <class COMPARE, class SCHED = void>
-struct insertion_sort_adapter;
-
-template <class Compare>
-struct insertion_sort_adapter<Compare, void>
+template <class Ordering>
+struct _adapter
 {
-    Compare ord;
-
-    friend constexpr auto operator|(
-        ranges::forward_range auto range,
-        [[maybe_unused]] insertion_sort_adapter const& adapter)
-    {
-        return insertion_sort(std::move(range), adapter.ord);
-    }
+    struct type;
 };
 
-template <class COMPARE, class SCHED>
-struct insertion_sort_adapter
-{
-    // Scheduler
-    SCHED sched;
+template <class Ordering>
+using adapter = _adapter<Ordering>::type;
 
-    friend constexpr auto operator|(
-        ranges::forward_range auto range,
-        [[maybe_unused]] insertion_sort_adapter&& adapter)
+namespace _cpo
+{
+inline constexpr struct _fn
+{
+    template <class Ordering = ordering::ascending>
+    requires(!ranges::range<Ordering> and !ranges::view_<Ordering>)
+    static constexpr auto operator()(Ordering&& ordering = {})
     {
-        return insertion_sort(
-            std::move(range),
-            std::forward<decltype(adapter)>(adapter).sched,
-            pred_t<COMPARE, ranges::range_value_t<decltype(range)>>{});
+        return adapter<Ordering>{std::forward<Ordering>(ordering)};
     }
-};
+
+    template <ranges::forward_range Range, class Ordering = ordering::ascending>
+    requires(unifex::tag_invocable<_fn, Range, Ordering>)
+    static constexpr auto operator()(Range&& range, Ordering&& ordering = {})
+        noexcept(unifex::is_nothrow_tag_invocable_v<_fn, decltype(range), Ordering>)
+            -> unifex::tag_invoke_result_t<_fn, Range, Ordering>
+    {
+        return tag_invoke(
+            _fn{}, std::forward<Range>(range), std::forward<Ordering>(ordering));
+    }
+
+    template <std::forward_iterator Itr,
+              ranges::sentinel_for<Itr> Sentinel,
+              class Ordering = ordering::ascending>
+    requires(unifex::tag_invocable<_fn, Itr, Sentinel, Ordering>)
+    static constexpr auto operator()(Itr&& start,
+                                     Sentinel&& end,
+                                     Ordering&& ordering = Ordering{})
+        noexcept(unifex::is_nothrow_tag_invocable_v<_fn, Itr, Sentinel, Ordering>)
+    {
+        return tag_invoke(_fn{},
+                          std::forward<Itr>(start),
+                          std::forward<Sentinel>(end),
+                          std::forward<Ordering>(ordering));
+    }
+
+private:
+    template <std::forward_iterator Itr,
+              ranges::sentinel_for<Itr> Sentinel,
+              class Ordering = ordering::ascending>
+    friend constexpr void tag_invoke(_fn /*unused*/,
+                                     Itr&& start,
+                                     Sentinel&& end,
+                                     Ordering&& /**/ = {})
+        noexcept(noexcept(_insertion_sort::algorithm(
+            std::forward<Itr>(start),
+            std::forward<Sentinel>(end),
+            predicate_for_t<Ordering, std::iter_value_t<Itr>>{})))
+    {
+        _insertion_sort::algorithm(std::forward<Itr>(start),
+                                   std::forward<Sentinel>(end),
+                                   predicate_for_t<Ordering, std::iter_value_t<Itr>>{});
+    }
+
+    template <ranges::forward_range Range, class Ordering = ordering::ascending>
+    friend constexpr auto tag_invoke(_fn /*unused*/, Range&& range, Ordering&& /**/ = {})
+        noexcept(noexcept(_insertion_sort::algorithm(
+            begin(range),
+            end(range),
+            predicate_for_t<Ordering, ranges::range_value_t<Range>>{})))
+            -> decltype(std::forward<Range>(range))
+    {
+        _insertion_sort::algorithm(
+            begin(range),
+            end(range),
+            predicate_for_t<Ordering, ranges::range_value_t<Range>>{});
+        return std::forward<Range>(range);
+    }
+} insertion_sort;
+} // namespace _cpo
 } // namespace _insertion_sort
 
-constexpr struct
+using _insertion_sort::_cpo::insertion_sort;
+
+namespace _insertion_sort
 {
-    template <class Ordering = ordering::ascending>
-    static constexpr auto operator()(
-        [[maybe_unused]] Ordering const& ordering = {})
+
+template <class Compare>
+struct _adapter<Compare>::type
+{
+    [[no_unique_address]] Compare compare_;
+
+    template <class Adapter>
+    requires std::same_as<std::remove_cvref_t<Adapter>, type>
+    friend constexpr auto operator|(ranges::forward_range auto&& range, Adapter&& self)
     {
-        return _insertion_sort::insertion_sort_adapter<Ordering>{ordering};
+        return tag_invoke(unifex::tag_t<insertion_sort>{},
+                          std::forward<decltype(range)>(range),
+                          std::forward_like<Adapter>(self.compare_));
     }
+};
 
-    template <class Ordering = ordering::ascending>
-    static constexpr auto operator()(ranges::forward_range auto range,
-                                     Ordering const& ordering = Ordering{})
-    {
-        return _insertion_sort::insertion_sort(std::move(range), ordering);
-    }
-
-    static constexpr auto operator()()
-    {
-        return _insertion_sort::insertion_sort_adapter<
-            ordering::ascending>{};
-    }
-
-    _insertion_sort::pred_t<ordering::ascending, void> ascending{};
-    _insertion_sort::pred_t<ordering::descending, void> decending{};
-
-} insertion_sort;
-
-constexpr auto insertion_sort_decending =
-    insertion_sort(ordering::descending{});
-constexpr auto insertion_sort_ascending =
-    insertion_sort(ordering::ascending{});
+} // namespace _insertion_sort
+inline constexpr auto insertion_sort_descending = insertion_sort(ordering::descending{});
+inline constexpr auto insertion_sort_ascending = insertion_sort(ordering::ascending{});
 
 } // namespace algo

@@ -29,8 +29,8 @@ namespace algo
 namespace _bubble_sort
 {
 
-auto algorithm(ranges::forward_range auto rng, auto const& cmp)
-    -> std::remove_reference_t<decltype(rng)>
+auto algorithm(ranges::forward_range auto rng,
+               auto const& cmp) -> std::remove_reference_t<decltype(rng)>
 {
     auto begin = ranges::begin(rng);
     auto end = ranges::end(rng);
@@ -41,7 +41,7 @@ auto algorithm(ranges::forward_range auto rng, auto const& cmp)
 
     while (end != snd) {
         while (b != end) {
-            if (cmp(*a, *b)) {
+            if (cmp(*b, *a)) {
                 ranges::iter_swap(a, b);
             }
             ++a;
@@ -53,24 +53,6 @@ auto algorithm(ranges::forward_range auto rng, auto const& cmp)
     }
     return rng;
 }
-
-template <class Ordering, class T = void>
-struct pred;
-
-template <class T>
-struct pred<ordering::ascending, T> final
-{
-    using type = std::greater<T>;
-};
-
-template <class T>
-struct pred<ordering::descending, T> final
-{
-    using type = std::less<T>;
-};
-
-template <class Ordering, class T>
-using pred_t = typename pred<Ordering, T>::type;
 
 template <class Ordering>
 struct _adapter final
@@ -98,18 +80,13 @@ struct _fn final
         return tag_invoke(_fn{}, FWD(range), ordering);
     }
 
-    _bubble_sort::pred_t<ordering::ascending, void> ascending{};
-    _bubble_sort::pred_t<ordering::descending, void> decending{};
-
 private:
     template <class Ordering>
     friend auto tag_invoke(_fn const& /*_*/,
                            ranges::forward_range auto&& range,
                            Ordering const& /*_*/)
     {
-        return algorithm(
-            FWD(range),
-            _bubble_sort::pred_t<Ordering, RNG_VALUE_T(range)>{});
+        return algorithm(FWD(range), predicate_for_t<Ordering, RNG_VALUE_T(range)>{});
     }
 };
 
@@ -126,7 +103,7 @@ struct _adapter<Ordering>::type final
     friend constexpr auto operator|(ranges::forward_range auto&& range,
                                     [[maybe_unused]] type const& _)
     {
-        return tag_invoke(bubble_sort, FWD(range), Ordering{});
+        return bubble_sort(FWD(range), Ordering{});
     }
 };
 

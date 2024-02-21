@@ -35,28 +35,28 @@ using testing::rand_range;
 
 TEST(Sorting, InsertSort_Ascending_Vector)
 {
-    EXPECT_TRUE(ranges::is_sorted(rand_range<>() |
-                                  algo::insertion_sort_ascending));
+    EXPECT_TRUE(ranges::is_sorted(rand_range<>() | algo::insertion_sort_ascending));
 }
 
 TEST(Sorting, InsertSort_Ascending_List)
 {
-    EXPECT_TRUE(ranges::is_sorted(rand_range<std::list>() |
-                                  algo::insertion_sort_ascending));
+    EXPECT_TRUE(
+        ranges::is_sorted(rand_range<std::list>() | algo::insertion_sort_ascending));
 }
 
 TEST(Sorting, InsertSort_Descending_Vector)
 {
-    EXPECT_TRUE(
-        ranges::is_sorted(rand_range<>() | algo::insertion_sort_decending,
-                          algo::insertion_sort.decending));
+    auto compare = algo::predicate_for_t<algo::ordering::descending, int>{};
+    EXPECT_TRUE(ranges::is_sorted(rand_range<>() | algo::insertion_sort_descending,
+                                  compare)); // NOLINT
 }
 
 TEST(Sorting, InsertSort_Descending_List)
 {
-    EXPECT_TRUE(ranges::is_sorted(rand_range<std::list>() |
-                                      algo::insertion_sort_decending,
-                                  algo::insertion_sort.decending));
+    auto compare = algo::predicate_for_t<algo::ordering::descending, int>{};
+    EXPECT_TRUE(
+        ranges::is_sorted(rand_range<std::list>() | algo::insertion_sort_descending,
+                          compare)); // NOLINT
 }
 
 TEST(Sorting, MergeSort_Ascending_Vector)
@@ -92,26 +92,22 @@ TEST(Sorting, MergeSort_Descending_Vector)
 
 TEST(Sorting, BubbleSort_Ascending_Vector)
 {
-    EXPECT_TRUE(
-        ranges::is_sorted(rand_range<>() | algo::bubble_sort_ascending));
+    EXPECT_TRUE(ranges::is_sorted(rand_range<>() | algo::bubble_sort_ascending));
 }
 
 TEST(Sorting, BubbleSort_Ascending_List)
 {
-    EXPECT_TRUE(ranges::is_sorted(rand_range<std::list>() |
-                                  algo::bubble_sort_ascending));
+    EXPECT_TRUE(ranges::is_sorted(rand_range<std::list>() | algo::bubble_sort_ascending));
 }
 
 TEST(Sorting, BubbleSort_Descending_Vector)
 {
-    EXPECT_TRUE(
-        ranges::is_sorted(rand_range<>() | algo::bubble_sort_decending));
+    EXPECT_TRUE(ranges::is_sorted(rand_range<>() | algo::bubble_sort_decending));
 }
 
 TEST(Sorting, BubbleSort_Descending_List)
 {
-    EXPECT_TRUE(ranges::is_sorted(rand_range<std::list>() |
-                                  algo::bubble_sort_decending));
+    EXPECT_TRUE(ranges::is_sorted(rand_range<std::list>() | algo::bubble_sort_decending));
 }
 
 TEST(Sorting, HeapSort_Ascending_Vector)
@@ -155,47 +151,48 @@ TEST(Sorting, QuickSort_Ascending_Vector_Hoare_Scheme)
 
 TEST(Sorting, QuickSort_Descending_Vector_Hoare_Scheme)
 {
+    auto compare = algo::predicate_for_t<algo::ordering::descending, int>{};
     auto expected = rand_range<>();
     auto result = expected | algo::quick_sort(algo::ordering::descending{});
-    ranges::sort(expected, algo::quick_sort.decending);
+    ranges::sort(expected, compare);
     EXPECT_EQ(result, expected);
 }
 
 TEST(Sorting, QuickSort_Ascending_Vector_Lomuto_Scheme)
 {
     auto expected = rand_range<>();
-    auto result = expected | algo::quick_sort(algo::ordering::ascending{},
-                                              algo::lomuto_partition);
+    auto result =
+        expected | algo::quick_sort(algo::ordering::ascending{}, algo::lomuto_partition);
     ranges::sort(expected);
     EXPECT_EQ(result, expected);
 }
 
 TEST(Sorting, QuickSort_Descending_Vector_Lomuto_Scheme)
 {
+    auto compare = algo::predicate_for_t<algo::ordering::descending, int>{};
     auto expected = rand_range<>();
-    auto result = expected | algo::quick_sort(algo::ordering::descending{},
-                                              algo::lomuto_partition);
-    ranges::sort(expected, algo::quick_sort.decending);
+    auto result =
+        expected | algo::quick_sort(algo::ordering::descending{}, algo::lomuto_partition);
+    ranges::sort(expected, compare);
     EXPECT_EQ(result, expected);
 }
 
 TEST(Sorting, QuickSort_Ascending_Vector_Branchless_Lomuto_Scheme)
 {
     auto expected = rand_range<>();
-    auto result =
-        expected | algo::quick_sort(algo::ordering::ascending{},
-                                    algo::branchless_lomuto_partition);
+    auto result = expected | algo::quick_sort(algo::ordering::ascending{},
+                                              algo::branchless_lomuto_partition);
     ranges::sort(expected);
     EXPECT_EQ(result, expected);
 }
 
 TEST(Sorting, QuickSort_Descending_Vector_Branchless_Lomuto_Scheme)
 {
+    auto compare = algo::predicate_for_t<algo::ordering::descending, int>{};
     auto expected = rand_range<>();
-    auto result =
-        expected | algo::quick_sort(algo::ordering::descending{},
-                                    algo::branchless_lomuto_partition);
-    ranges::sort(expected, algo::quick_sort.decending);
+    auto result = expected | algo::quick_sort(algo::ordering::descending{},
+                                              algo::branchless_lomuto_partition);
+    ranges::sort(expected, compare);
     EXPECT_EQ(result, expected);
 }
 
@@ -357,43 +354,39 @@ TEST(Sorting, TreeSort_Descending_Vector)
 
 TEST(Sorting, BlockSort_Ascending_Vector)
 {
-    EXPECT_TRUE(
-        ranges::is_sorted(rand_range<>() | algo::block_sort_ascending,
-                          algo::block_sort.ascending));
+    EXPECT_TRUE(ranges::is_sorted(rand_range<>() | algo::block_sort_ascending,
+                                  algo::predicate_for_t<algo::ordering::ascending>{}));
 }
 
 TEST(Sorting, BlockSort_Descending_Vector)
 {
-    EXPECT_TRUE(
-        ranges::is_sorted(rand_range<>() | algo::block_sort_decending,
-                          algo::block_sort.decending));
+    EXPECT_TRUE(ranges::is_sorted(rand_range<>() | algo::block_sort_descending,
+                                  algo::predicate_for_t<algo::ordering::descending>{}));
 }
 
 TEST(Sorting, BlockSort_Ascending_NoCache_Vector)
 {
-    EXPECT_TRUE(
-        ranges::is_sorted(rand_range<>() | algo::block_sort_ascending(0),
-                          algo::block_sort.ascending));
+    EXPECT_TRUE(ranges::is_sorted(rand_range<>() | algo::block_sort_ascending(0),
+                                  algo::predicate_for_t<algo::ordering::ascending>{}));
 }
 
 TEST(Sorting, BlockSort_Descending_NoCache_Vector)
 {
-    EXPECT_TRUE(
-        ranges::is_sorted(rand_range<>() | algo::block_sort_decending(0),
-                          algo::block_sort.decending));
+    EXPECT_TRUE(ranges::is_sorted(rand_range<>() | algo::block_sort_descending(0),
+                                  algo::predicate_for_t<algo::ordering::descending>{}));
 }
 
 TEST(Sorting, BlockSort_Ascending_SmallCache_Vector)
 {
-    EXPECT_TRUE(ranges::is_sorted(
-        rand_range<>() | algo::block_sort_ascending(range_size / 4 + 1),
-        algo::block_sort.ascending));
+    EXPECT_TRUE(
+        ranges::is_sorted(rand_range<>() | algo::block_sort_ascending(range_size / 4 + 1),
+                          algo::predicate_for_t<algo::ordering::ascending>{}));
 }
 
 TEST(Sorting, BlockSort_Descending_SmallCache_Vector)
 {
 
-    EXPECT_TRUE(ranges::is_sorted(
-        rand_range<>() | algo::block_sort_decending(range_size / 4 + 1),
-        algo::block_sort.decending));
+    EXPECT_TRUE(ranges::is_sorted(rand_range<>() |
+                                      algo::block_sort_descending(range_size / 4 + 1),
+                                  algo::predicate_for_t<algo::ordering::descending>{}));
 }

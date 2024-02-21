@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include <range/v3/range_concepts.hpp>
+
 namespace algo
 {
 
