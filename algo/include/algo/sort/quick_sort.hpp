@@ -57,7 +57,7 @@ struct comp<ordering::ascending, T>
 };
 
 template <class T>
-struct comp<ordering::decending, T>
+struct comp<ordering::descending, T>
 {
     using type = std::greater<T>;
 };
@@ -161,7 +161,7 @@ struct _fn
             _fn{}, FWD(range), FWD(ordering), partition_algorithm);
     }
 
-    comp_t<ordering::decending, void> decending{};
+    comp_t<ordering::descending, void> decending{};
     comp_t<ordering::ascending, void> ascending{};
 
 private:

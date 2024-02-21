@@ -50,7 +50,7 @@ struct pred<ordering::ascending, T>
 };
 
 template <class T>
-struct pred<ordering::decending, T>
+struct pred<ordering::descending, T>
 {
     using type = std::greater<T>;
 };
@@ -188,12 +188,12 @@ constexpr struct
     }
 
     _insertion_sort::pred_t<ordering::ascending, void> ascending{};
-    _insertion_sort::pred_t<ordering::decending, void> decending{};
+    _insertion_sort::pred_t<ordering::descending, void> decending{};
 
 } insertion_sort;
 
 constexpr auto insertion_sort_decending =
-    insertion_sort(ordering::decending{});
+    insertion_sort(ordering::descending{});
 constexpr auto insertion_sort_ascending =
     insertion_sort(ordering::ascending{});
 

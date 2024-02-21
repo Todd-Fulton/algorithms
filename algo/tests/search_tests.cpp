@@ -17,8 +17,8 @@
 
 #include <gtest/gtest.h>
 
-#include <algo/sort.hpp>
 #include <algo/search.hpp>
+#include <algo/sort.hpp>
 
 #include <algorithm>
 #include <list>
@@ -84,17 +84,16 @@ TEST(Searching, BinarySearchRandom_List)
     uniform_int_distribution<> val_distrib{0, 10000};
     uniform_int_distribution<size_t> idx_distrib(0, TEST_RANGE_SIZE - 1);
 
-    for_each(std::ranges::iota_view(0ULL, TEST_RANGE_SIZE),
-             [&]([[maybe_unused]] auto const& _) {
-                 given.emplace_back(val_distrib(gen));
-             });
+    for_each(
+        std::ranges::iota_view(0ULL, TEST_RANGE_SIZE),
+        [&]([[maybe_unused]] auto const& _) { given.emplace_back(val_distrib(gen)); });
 
     given = std::move(given) | algo::insertion_sort();
 
     auto rand_idx = idx_distrib(gen);
 
     auto expected = std::begin(given);
-    while(rand_idx != 0) {
+    while (rand_idx != 0) {
         ++expected;
         --rand_idx;
     }

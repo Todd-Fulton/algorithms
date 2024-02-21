@@ -14,12 +14,17 @@ macro(algorithms_enable_hardening target global ubsan_minimal_runtime)
     string(APPEND NEW_LINK_OPTIONS " /NXCOMPAT /CETCOMPAT")
 
   elseif(CMAKE_CXX_COMPILER_ID MATCHES ".*Clang|GNU")
-    if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    if(CMAKE_BUILD_TYPE STREQUAL "Release")
       string(APPEND NEW_COMPILE_OPTIONS
              " -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3")
       message(
         STATUS "*** g++/clang -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=3 enabled")
-    endif(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    elseif(CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+      string(APPEND NEW_COMPILE_OPTIONS
+             " -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2")
+      message(
+        STATUS "*** g++/clang -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 enabled")
+    endif(CMAKE_BUILD_TYPE STREQUAL "Release")
 
     # If we are linking against libc++
     if(CMAKE_CXX_FLAGS MATCHES ".*-stdlib=libc\\+\\+.*")

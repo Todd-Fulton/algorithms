@@ -22,7 +22,7 @@
 namespace algo {
 
 struct ordering {
-    struct decending{};
+    struct descending{};
     struct ascending{};
 };
 

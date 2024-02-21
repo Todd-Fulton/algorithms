@@ -64,7 +64,7 @@ struct pred<ordering::ascending, T> final
 };
 
 template <class T>
-struct pred<ordering::decending, T> final
+struct pred<ordering::descending, T> final
 {
     using type = std::less<T>;
 };
@@ -99,7 +99,7 @@ struct _fn final
     }
 
     _bubble_sort::pred_t<ordering::ascending, void> ascending{};
-    _bubble_sort::pred_t<ordering::decending, void> decending{};
+    _bubble_sort::pred_t<ordering::descending, void> decending{};
 
 private:
     template <class Ordering>
@@ -132,7 +132,7 @@ struct _adapter<Ordering>::type final
 
 } // namespace _bubble_sort
 
-constexpr auto bubble_sort_decending = bubble_sort(ordering::decending{});
+constexpr auto bubble_sort_decending = bubble_sort(ordering::descending{});
 constexpr auto bubble_sort_ascending = bubble_sort(ordering::ascending{});
 
 } // namespace algo

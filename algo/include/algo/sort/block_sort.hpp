@@ -49,7 +49,7 @@ struct pred<ordering::ascending, T>
 };
 
 template <class T>
-struct pred<ordering::decending, T>
+struct pred<ordering::descending, T>
 {
     using type = std::greater<T>;
 };
@@ -1615,7 +1615,7 @@ using adapter = _adapter<std::remove_cvref_t<Ordering>>::type;
 
 namespace _cpo
 {
-struct _fn
+constexpr struct _fn
 {
 
     static constexpr auto operator()(
@@ -1634,7 +1634,7 @@ struct _fn
         return tag_invoke(_fn{}, FWD(range), FWD(ordering), cache_size);
     }
 
-    _block_sort::pred_t<ordering::decending, void> decending{};
+    _block_sort::pred_t<ordering::descending, void> decending{};
     _block_sort::pred_t<ordering::ascending, void> ascending{};
 
 private:
@@ -1648,12 +1648,12 @@ private:
                          pred_t<Ordering, RNG_VALUE_T(range)>{},
                          FWD(cache_size));
     }
-};
+} block_sort;
 } // namespace _cpo
 
 } // namespace _block_sort
 
-constexpr auto block_sort = _block_sort::_cpo::_fn{};
+using _block_sort::_cpo::block_sort;
 
 namespace _block_sort
 {
@@ -1695,7 +1695,7 @@ struct _adapter<Ordering>::type final
 
 } // namespace _block_sort
 constexpr auto block_sort_ascending = block_sort(ordering::ascending{});
-constexpr auto block_sort_decending = block_sort(ordering::decending{});
+constexpr auto block_sort_decending = block_sort(ordering::descending{});
 
 } // namespace algo
 

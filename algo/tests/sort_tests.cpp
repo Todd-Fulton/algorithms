@@ -156,7 +156,7 @@ TEST(Sorting, QuickSort_Ascending_Vector_Hoare_Scheme)
 TEST(Sorting, QuickSort_Descending_Vector_Hoare_Scheme)
 {
     auto expected = rand_range<>();
-    auto result = expected | algo::quick_sort(algo::ordering::decending{});
+    auto result = expected | algo::quick_sort(algo::ordering::descending{});
     ranges::sort(expected, algo::quick_sort.decending);
     EXPECT_EQ(result, expected);
 }
@@ -173,7 +173,7 @@ TEST(Sorting, QuickSort_Ascending_Vector_Lomuto_Scheme)
 TEST(Sorting, QuickSort_Descending_Vector_Lomuto_Scheme)
 {
     auto expected = rand_range<>();
-    auto result = expected | algo::quick_sort(algo::ordering::decending{},
+    auto result = expected | algo::quick_sort(algo::ordering::descending{},
                                               algo::lomuto_partition);
     ranges::sort(expected, algo::quick_sort.decending);
     EXPECT_EQ(result, expected);
@@ -193,7 +193,7 @@ TEST(Sorting, QuickSort_Descending_Vector_Branchless_Lomuto_Scheme)
 {
     auto expected = rand_range<>();
     auto result =
-        expected | algo::quick_sort(algo::ordering::decending{},
+        expected | algo::quick_sort(algo::ordering::descending{},
                                     algo::branchless_lomuto_partition);
     ranges::sort(expected, algo::quick_sort.decending);
     EXPECT_EQ(result, expected);
