@@ -1,6 +1,6 @@
 ﻿---
 BasedOnStyle: Microsoft
-ColumnLimit: 85
+ColumnLimit: 90
 AlignAfterOpenBracket: Align
 AlwaysBreakTemplateDeclarations: 'Yes'
 BinPackArguments: false
@@ -21,4 +21,5 @@ BraceWrapping:
     AfterControlStatement: 'Never'
     SplitEmptyRecord: false
 BreakBeforeConceptDeclarations: 'Always'
+AllowBreakBeforeNoexceptSpecifier: 'OnlyWithParen'
 ...
