@@ -18,8 +18,10 @@
 
 #pragma once
 
+#include <range/v3/iterator/concepts.hpp>
 #include <range/v3/range/concepts.hpp>
 #include <range/v3/range_concepts.hpp>
+#include <type_traits>
 #include <unifex/tag_invoke.hpp>
 
 #include "ordering.hpp"
@@ -132,10 +134,11 @@ inline constexpr struct _fn
             _fn{}, std::forward<Range>(range), std::forward<Ordering>(ordering));
     }
 
-    template <std::forward_iterator Itr,
-              ranges::sentinel_for<Itr> Sentinel,
-              class Ordering = ordering::ascending>
-    requires(unifex::tag_invocable<_fn, Itr, Sentinel, Ordering>)
+    template <class Itr, class Sentinel, class Ordering = ordering::ascending>
+    requires(
+        unifex::tag_invocable<_fn, Itr, Sentinel, Ordering> and
+        ranges::forward_iterator<std::remove_cvref_t<Itr>> and
+        ranges::sentinel_for<std::remove_cvref_t<Sentinel>, std::remove_cvref_t<Itr>>)
     static constexpr auto operator()(Itr&& start,
                                      Sentinel&& end,
                                      Ordering&& ordering = Ordering{})
@@ -148,9 +151,10 @@ inline constexpr struct _fn
     }
 
 private:
-    template <std::forward_iterator Itr,
-              ranges::sentinel_for<Itr> Sentinel,
-              class Ordering = ordering::ascending>
+    template <class Itr, class Sentinel, class Ordering = ordering::ascending>
+    requires(
+        ranges::forward_iterator<std::remove_cvref_t<Itr>> and
+        ranges::sentinel_for<std::remove_cvref_t<Sentinel>, std::remove_cvref_t<Itr>>)
     friend constexpr void tag_invoke(_fn /*unused*/,
                                      Itr&& start,
                                      Sentinel&& end,

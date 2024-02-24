@@ -22,6 +22,7 @@
 #include <range/v3/algorithm.hpp>
 
 #include "rand_range.hpp"
+#include <algo/sort/intro_sort.hpp>
 
 #include <list>
 #include <vector>
@@ -348,6 +349,18 @@ TEST(Sorting, TreeSort_Descending_Vector)
     shuffle(given, gen);
 
     algo::tree_sort(given, greater<>{});
+
+    EXPECT_EQ(given, expected);
+}
+
+TEST(Sorting, IntroSort_Descending_Vector)
+{
+
+    auto given = rand_range<>();
+    auto expected = given;
+    ranges::sort(expected);
+
+    algo::intro_sort(given, std::less<int>{});
 
     EXPECT_EQ(given, expected);
 }

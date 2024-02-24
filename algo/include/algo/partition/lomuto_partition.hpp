@@ -18,10 +18,14 @@
 
 #pragma once
 
+#include <iterator>
 #include <range/v3/iterator/concepts.hpp>
+#include <range/v3/iterator/operations.hpp>
 #include <range/v3/range_concepts.hpp>
 
 #include <algo/prelude.hpp>
+#include <type_traits>
+#include <unifex/tag_invoke.hpp>
 
 // TODO:
 // [ ] Add concept constrains to functions and member functions
@@ -56,8 +60,7 @@ struct _adapter
 };
 
 template <class Predicate, class Projection>
-using adapter =
-    _adapter<std::decay_t<Predicate>, std::decay_t<Projection>>::type;
+using adapter = _adapter<std::decay_t<Predicate>, std::decay_t<Projection>>::type;
 
 namespace _cpo
 {
@@ -71,17 +74,14 @@ struct _fn
                                      Predicate&& predicate,
                                      Projection&& projection = {})
     {
-        return tag_invoke(
-            _fn{}, FWD(range), FWD(predicate), FWD(projection));
+        return tag_invoke(_fn{}, FWD(range), FWD(predicate), FWD(projection));
     }
 
     template <class Predicate, class Projection = std::identity>
     requires(!ranges::range<Predicate>)
-    static constexpr auto operator()(Predicate&& predicate,
-                                     Projection&& projection = {})
+    static constexpr auto operator()(Predicate&& predicate, Projection&& projection = {})
     {
-        return adapter<Predicate, Projection>{FWD(predicate),
-                                              FWD(projection)};
+        return adapter<Predicate, Projection>{FWD(predicate), FWD(projection)};
     }
 
 private:
@@ -111,10 +111,7 @@ struct _adapter<Predicate, Projection>::type
     requires std::same_as<std::remove_cvref_t<Adapter>, type>
     constexpr friend auto operator|(Range&& range, Adapter&& self)
     {
-        return tag_invoke(lomuto_partition,
-                          FWD(range),
-                          FWD(self).pred_,
-                          FWD(self).proj_);
+        return tag_invoke(lomuto_partition, FWD(range), FWD(self).pred_, FWD(self).proj_);
     }
 };
 
@@ -125,19 +122,18 @@ struct _adapter<Predicate, Projection>::type
 namespace _branchless_lomuto_partition
 {
 
-constexpr auto algorithm(auto range, auto&& predicate, auto&& projection)
+constexpr auto algorithm(auto start, auto end, auto&& predicate, auto&& projection)
 {
-    if (ranges::empty(range)) {
-        return std::make_pair(ranges::iterator_t<decltype(range)>{},
-                              std::move(range));
+    if (std::distance(start, end) == 0) {
+        return start;
     }
 
-    auto i = ranges::begin(range);
-    auto j = ranges::begin(range);
+    auto i = start;
+    auto j = start;
     auto temp = ranges::iter_move(i);
 
-    const auto last = i + ranges::range_difference_t<decltype(range)>(
-                              ranges::size(range) - 1);
+    const auto last =
+        i + std::iter_difference_t<decltype(start)>(ranges::distance(start, end) - 1);
 
     while (j != last) {
         *j = ranges::iter_move(i);
@@ -150,7 +146,7 @@ constexpr auto algorithm(auto range, auto&& predicate, auto&& projection)
     *i = std::move(temp);
     i += predicate(projection(*i));
 
-    return std::make_pair(i, std::move(range));
+    return i;
 }
 
 template <class Predicate, class Projection>
@@ -160,8 +156,7 @@ struct _adapter
 };
 
 template <class Predicate, class Projection>
-using adapter =
-    _adapter<std::decay_t<Predicate>, std::decay_t<Projection>>::type;
+using adapter = _adapter<std::decay_t<Predicate>, std::decay_t<Projection>>::type;
 
 namespace _cpo
 {
@@ -175,34 +170,72 @@ struct _fn
                                      Predicate&& predicate,
                                      Projection&& projection = {})
     {
-        return tag_invoke(
-            _fn{}, FWD(range), FWD(predicate), FWD(projection));
+        return tag_invoke(_fn{}, FWD(range), FWD(predicate), FWD(projection));
+    }
+
+    template <class Itr,
+              class Sentinel,
+              class Predicate,
+              class Projection = ranges::identity>
+    requires(
+        unifex::is_tag_invocable_v<_fn, Itr, Sentinel, Predicate, Projection> and
+        ranges::random_access_iterator<std::remove_cvref_t<Itr>> and
+        ranges::sentinel_for<std::remove_cvref_t<Sentinel>, std::remove_cvref_t<Itr>>)
+    static constexpr auto operator()(Itr&& start,
+                                     Sentinel&& end,
+                                     Predicate&& predicate,
+                                     Projection&& projection = {})
+    {
+        return tag_invoke(_fn{},
+                          std::forward<Itr>(start),
+                          std::forward<Sentinel>(end),
+                          std::forward<Predicate>(predicate),
+                          std::forward<Projection>(projection));
     }
 
     template <class Predicate, class Projection = std::identity>
     requires(!ranges::range<Predicate>)
-    static constexpr auto operator()(Predicate&& predicate,
-                                     Projection&& projection = {})
+    static constexpr auto operator()(Predicate&& predicate, Projection&& projection = {})
     {
-        return adapter<Predicate, Projection>{FWD(predicate),
-                                              FWD(projection)};
+        return adapter<Predicate, Projection>{FWD(predicate), FWD(projection)};
     }
 
 private:
-    friend constexpr auto tag_invoke(
-        _fn const& /*f*/,
-        ranges::random_access_range auto&& range,
-        auto&& predicate,
-        auto&& projection = std::identity{})
+    friend constexpr auto tag_invoke(_fn const& /*f*/,
+                                     ranges::random_access_range auto&& range,
+                                     auto&& predicate,
+                                     auto&& projection = std::identity{})
     {
-        return algorithm(FWD(range), FWD(predicate), FWD(projection));
+        return std::pair(algorithm(ranges::begin(range),
+                                   ranges::end(range),
+                                   FWD(predicate),
+                                   FWD(projection)),
+                         FWD(range));
+    }
+
+    template <class Itr,
+              class Sentinel,
+              class Predicate,
+              class Projection = ranges::identity>
+    requires(
+        ranges::random_access_iterator<std::remove_cvref_t<Itr>> and
+        ranges::sentinel_for<std::remove_cvref_t<Sentinel>, std::remove_cvref_t<Itr>>)
+    friend constexpr auto tag_invoke(_fn const& /*f*/,
+                                     Itr&& first,
+                                     Sentinel&& end,
+                                     Predicate&& predicate,
+                                     Projection&& projection = std::identity{})
+    {
+        return algorithm(std::forward<Itr>(first),
+                         std::forward<Sentinel>(end),
+                         std::forward<Predicate>(predicate),
+                         std::forward<Projection>(projection));
     }
 };
 } // namespace _cpo
 } // namespace _branchless_lomuto_partition
 
-constexpr auto branchless_lomuto_partition =
-    _branchless_lomuto_partition::_cpo::_fn{};
+constexpr auto branchless_lomuto_partition = _branchless_lomuto_partition::_cpo::_fn{};
 
 namespace _branchless_lomuto_partition
 {
@@ -217,10 +250,8 @@ struct _adapter<Predicate, Projection>::type
     requires std::same_as<std::remove_cvref_t<Adapter>, type>
     constexpr friend auto operator|(Range&& range, Adapter&& self)
     {
-        return tag_invoke(branchless_lomuto_partition,
-                          FWD(range),
-                          FWD(self).pred_,
-                          FWD(self).proj_);
+        return tag_invoke(
+            branchless_lomuto_partition, FWD(range), FWD(self).pred_, FWD(self).proj_);
     }
 };
 

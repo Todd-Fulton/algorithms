@@ -26,10 +26,43 @@ namespace algo
 struct ordering
 {
     struct descending
-    {};
+    {
+        template <class LHS, class RHS>
+        requires(requires(LHS lhs, RHS rhs) {
+            { lhs < rhs } -> std::convertible_to<bool>;
+        })
+        static constexpr bool operator()(LHS&& lhs, RHS&& rhs) noexcept(noexcept(lhs < rhs))
+        {
+            return std::forward<LHS>(lhs) < std::forward<RHS>(rhs);
+        }
+    };
     struct ascending
-    {};
+    {
+        template <class LHS, class RHS>
+        requires(requires(LHS lhs, RHS rhs) {
+            { lhs > rhs } -> std::convertible_to<bool>;
+        })
+        static constexpr bool operator()(LHS&& lhs, RHS&& rhs) noexcept(noexcept(lhs > rhs))
+        {
+            return std::forward<LHS>(lhs) > std::forward<RHS>(rhs);
+        }
+    };
 };
+
+template <class Ordering>
+struct is_ordering : std::false_type
+{};
+
+template <>
+struct is_ordering<ordering::ascending> : std::true_type
+{};
+
+template <>
+struct is_ordering<ordering::descending> : std::true_type
+{};
+
+template <class T>
+inline constexpr bool is_ordering_v = is_ordering<std::remove_cvref_t<T>>::value;
 
 /**
  * @brief  `predicate_for` is a struct that contains a function object for comparing two
@@ -44,15 +77,14 @@ template <class Ordering, class T = void>
 struct predicate_for;
 
 template <class Ordering>
-requires(!(std::same_as<Ordering, ordering::ascending> or
-           std::same_as<Ordering, ordering::descending>))
+requires(!is_ordering_v<Ordering>)
 struct predicate_for<Ordering, void>
 {
     using type = Ordering;
 };
 
 template <template <class> class Cmp, class T>
-requires(std::invocable<Cmp<T>, T>)
+requires(std::invocable<Cmp<T>, T, T> and not is_ordering_v<Cmp<T>>)
 struct predicate_for<Cmp<T>, T>
 {
     using type = Cmp<T>;
@@ -60,7 +92,8 @@ struct predicate_for<Cmp<T>, T>
 
 /** Rebinds Cmp<void> to Cmp<T> */
 template <template <class> class Cmp, class T>
-// requires(std::invocable<Cmp<void>, T>)
+requires(std::invocable<Cmp<void>, T, T> and not is_ordering_v<Cmp<void>> and
+         std::invocable<Cmp<T>, T, T> and not is_ordering_v<Cmp<T>>)
 struct predicate_for<Cmp<void>, T>
 {
     using type = Cmp<T>;
@@ -83,4 +116,28 @@ struct predicate_for<ordering::descending, T>
 /** using declaration for pred<Ordering, T>::type */
 template <class Ordering, class T = void>
 using predicate_for_t = typename predicate_for<std::remove_cvref_t<Ordering>, T>::type;
+
+template <class P, class T = void>
+constexpr auto&& predicate_forward
+    [[maybe_unused]] (std::remove_reference_t<P>&& ordering_or_func) noexcept
+{
+    if constexpr (is_ordering_v<P>) {
+        return predicate_for_t<P, T>{};
+    }
+    else {
+        return static_cast<P&&>(ordering_or_func);
+    }
+}
+
+template <class P, class T = void>
+constexpr auto&& predicate_forward
+    [[maybe_unused]] (std::remove_reference_t<P>& ordering_or_func) noexcept
+{
+    if constexpr (is_ordering_v<P>) {
+        return predicate_for_t<P, T>{};
+    }
+    else {
+        return static_cast<P&&>(ordering_or_func);
+    }
+}
 } // namespace algo
