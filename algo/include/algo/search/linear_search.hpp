@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include "algo/sort/ordering.hpp"
+#include "algo/sort/sorted.hpp"
 #include <range/v3/range_concepts.hpp>
 #include <unifex/tag_invoke.hpp>
 
@@ -51,15 +53,17 @@ namespace _linear_search
 {
 
 template <std::forward_iterator Itr,
-          ranges::sentinel_for<Itr> Sentinel,
-          class CMP = std::equal_to<>>
+          ranges::sentinel_for<std::remove_cvref_t<Itr>> Sentinel,
+          class Relation,
+          class Projection>
 auto algorithm(Itr start,
                Sentinel end,
                std::iter_value_t<Itr> const& key,
-               CMP cmp = CMP{}) -> Itr
+               Relation&& rel,
+               Projection&& proj) -> Itr
 {
     while (start != end) {
-        if (cmp(*start, key)) {
+        if (!rel(proj(*start), proj(key))) {
             break;
         }
         ++start;
@@ -72,14 +76,14 @@ auto algorithm(Itr start,
  * It has a nested `type` struct that defines the actual adapter type. This adapter type
  * can be used with the `|` operator to pipe a range into a linear search algorithm.
  */
-template <class Key>
+template <class Key, class Relation, class Projection>
 struct _adapter final
 {
     struct type;
 };
 
-template <class Key>
-using adapter = _adapter<Key>::type;
+template <class Key, class Relation, class Projection>
+using adapter = _adapter<Key, std::decay_t<Relation>, std::decay_t<Projection>>::type;
 
 /**
  * `_cpo` is a namespace that contains a struct called `_fn`, which is a tag-invocable
@@ -89,81 +93,199 @@ using adapter = _adapter<Key>::type;
  */
 namespace _cpo
 {
-inline constexpr struct _fn
-{
-
-    // TODO: Better refinement
-    template <class Key>
-    requires(!(ranges::range<Key> or ranges::view_<Key>))
-    static constexpr auto operator()(Key&& key)
-    {
-        return adapter<Key>{std::forward<Key>(key)};
-    }
-
-    template <ranges::forward_range Range, class Key>
-    requires(unifex::tag_invocable<_fn, Range, Key> and ranges::viewable_range<Range>)
-    static constexpr auto operator()(Range&& range, Key&& key)
-    {
-        return tag_invoke(_fn{}, std::forward<Range>(range), std::forward<Key>(key));
-    }
-    template <std::forward_iterator Itr, ranges::sentinel_for<Itr> Sentinel, class Key>
-    requires(unifex::tag_invocable<_fn, Itr, Sentinel, Key>)
-    static constexpr auto operator()(Itr&& first, Sentinel&& end, Key&& key)
-    {
-        return tag_invoke(_fn{},
-                          std::forward<Itr>(first),
-                          std::forward<Sentinel>(end),
-                          std::forward<Key>(key));
-    }
-
-private:
-    template <ranges::forward_range Range, class Key>
-    requires(ranges::viewable_range<Range>)
-    friend constexpr auto tag_invoke([[maybe_unused]] _fn const& /*unused*/,
-                                     Range&& range,
-                                     Key&& key)
-    {
-        return algorithm(
-            ranges::begin(range), ranges::end(range), std::forward<Key>(key));
-    }
-
-    template <std::forward_iterator Itr, ranges::sentinel_for<Itr> Sentinel, class Key>
-    friend constexpr auto tag_invoke([[maybe_unused]] _fn const& /*unused*/,
-                                     Itr&& first,
-                                     Sentinel&& end,
-                                     Key&& key)
-    {
-        return algorithm(std::forward<Itr>(first),
-                         std::forward<Sentinel>(end),
-                         std::forward<Key>(key));
-    }
-} linear_search;
 } // namespace _cpo
 
 } // namespace _linear_search
 
 /**
- * `linear_search` is an alias for `_cpo::linear_search`, which is a tag-invocable object
+ * `linear_search_fn` is a tag-invocable object
  * for linear search algorithms. This object can be used with the `|` operator to pipe a
  * range into a linear search algorithm.
  */
-using _linear_search::_cpo::linear_search;
+inline constexpr struct linear_search_fn
+{
+
+    template <class Key,
+              class Relation = ordering::ascending_fn,
+              class Projection = ranges::identity>
+    requires(!ranges::range<Key> and
+             ranges::strict_weak_order<Relation,
+                                       ranges::invoke_result_t<Projection, Key>,
+                                       ranges::invoke_result_t<Projection, Key>>)
+    static constexpr auto operator()(Key&& key,
+                                     Relation&& rel = {},
+                                     Projection&& proj = {})
+        noexcept(std::is_nothrow_constructible_v<
+                 _linear_search::adapter<Key, Relation, Projection>,
+                 Key,
+                 Relation,
+                 Projection>) //
+        -> _linear_search::adapter<Key, Relation, Projection>
+    {
+        return {std::forward<Key>(key),
+                std::forward<Relation>(rel),
+                std::forward<Projection>(proj)};
+    }
+
+    template <ranges::forward_range Range, class Key, class Relation, class Projection>
+    requires(unifex::tag_invocable<linear_search_fn, Range, Key, Relation, Projection> and
+             ranges::viewable_range<Range>)
+    static constexpr auto operator()(Range&& range,
+                                     Key&& key,
+                                     Relation&& rel,
+                                     Projection&& proj) //
+        noexcept(unifex::is_nothrow_tag_invocable_v<linear_search_fn,
+                                                    Range,
+                                                    Key,
+                                                    Relation,
+                                                    Projection>)
+            -> unifex::
+                tag_invoke_result_t<linear_search_fn, Range, Key, Relation, Projection>
+    {
+        return tag_invoke(linear_search_fn{},
+                          std::forward<Range>(range),
+                          std::forward<Key>(key),
+                          std::forward<Relation>(rel),
+                          std::forward<Projection>(proj));
+    }
+
+    template <std::forward_iterator Itr,
+              ranges::sentinel_for<std::remove_cvref_t<Itr>> Sentinel,
+              class Key,
+              class Relation,
+              class Projection>
+    requires(unifex::tag_invocable<linear_search_fn,
+                                   Itr,
+                                   Sentinel,
+                                   Key,
+                                   Relation,
+                                   Projection>)
+    static constexpr auto operator()(
+        Itr&& first, Sentinel&& end, Key&& key, Relation&& rel, Projection&& proj)
+        noexcept(unifex::is_nothrow_tag_invocable_v<linear_search_fn,
+                                                    Itr,
+                                                    Sentinel,
+                                                    Key,
+                                                    Relation,
+                                                    Projection>)
+            -> unifex::tag_invoke_result_t<linear_search_fn,
+                                           Itr,
+                                           Sentinel,
+                                           Key,
+                                           Relation,
+                                           Projection>
+    {
+        return tag_invoke(linear_search_fn{},
+                          std::forward<Itr>(first),
+                          std::forward<Sentinel>(end),
+                          std::forward<Key>(key),
+                          std::forward<Relation>(rel),
+                          std::forward<Projection>(proj));
+    }
+
+    template <class Range,
+              class Key,
+              class Relation = ordering::ascending_fn,
+              class Projection = ranges::identity>
+    requires(not unifex::
+                 tag_invocable<linear_search_fn, Range, Key, Relation, Projection> and
+             not Sorted<Range> and
+             ranges::forward_range<Range> and ranges::viewable_range<Range> and
+             ranges::indirect_strict_weak_order<
+                 Relation,
+                 ranges::projected<ranges::iterator_t<Range>, Projection>,
+                 ranges::projected<ranges::iterator_t<Range>, Projection>>)
+    static constexpr auto operator()(Range&& range,
+                                     Key&& key,
+                                     Relation&& rel = {},
+                                     Projection&& proj = {})
+        noexcept(noexcept(_linear_search::algorithm(ranges::begin(range),
+                                                    ranges::end(range),
+                                                    std::forward<Key>(key),
+                                                    std::forward<Relation>(rel),
+                                                    std::forward<Projection>(proj))))
+            -> decltype(_linear_search::algorithm(ranges::begin(range),
+                                                  ranges::end(range),
+                                                  std::forward<Key>(key),
+                                                  std::forward<Relation>(rel),
+                                                  std::forward<Projection>(proj)))
+    {
+        return _linear_search::algorithm(ranges::begin(range),
+                                         ranges::end(range),
+                                         std::forward<Key>(key),
+                                         std::forward<Relation>(rel),
+                                         std::forward<Projection>(proj));
+    }
+
+    template <Sorted Range, class Key>
+    requires(ranges::viewable_range<Range>)
+    constexpr auto operator()(Range&& range, Key&& key) const noexcept(noexcept((*this)(
+        range.base(), std::forward<Key>(key), range.relation(), range.projection())))
+        -> decltype((*this)(
+            range.base(), std::forward<Key>(key), range.relation(), range.projection()))
+    {
+        return (*this)(
+            range.base(), std::forward<Key>(key), range.relation(), range.projection());
+    }
+
+    template <std::forward_iterator Itr,
+              ranges::sentinel_for<std::remove_cvref_t<Itr>> Sentinel,
+              class Key,
+              class Relation = ordering::ascending_fn,
+              class Projection = ranges::identity>
+    requires(not unifex::tag_invocable<linear_search_fn,
+                                       Itr,
+                                       Sentinel,
+                                       Key,
+                                       Relation,
+                                       Projection> and
+             ranges::indirect_strict_weak_order<
+                 Relation,
+                 ranges::projected<std::remove_cvref_t<Itr>, Projection>,
+                 ranges::projected<std::remove_cvref_t<Itr>, Projection>>)
+    static constexpr auto operator()(Itr&& first,
+                                     Sentinel&& end,
+                                     Key&& key,
+                                     Relation&& rel = {},
+                                     Projection&& proj = {})
+        noexcept(noexcept(_linear_search::algorithm(std::forward<Itr>(first),
+                                                    std::forward<Sentinel>(end),
+                                                    std::forward<Key>(key),
+                                                    std::forward<Relation>(rel),
+                                                    std::forward<Projection>(proj))))
+            -> decltype(_linear_search::algorithm(std::forward<Itr>(first),
+                                                  std::forward<Sentinel>(end),
+                                                  std::forward<Key>(key),
+                                                  std::forward<Relation>(rel),
+                                                  std::forward<Projection>(proj)))
+    {
+        return _linear_search::algorithm(std::forward<Itr>(first),
+                                         std::forward<Sentinel>(end),
+                                         std::forward<Key>(key),
+                                         std::forward<Relation>(rel),
+                                         std::forward<Projection>(proj));
+    }
+} linear_search;
 
 namespace _linear_search
 {
 
-template <class Key>
-struct _adapter<Key>::type final
+template <class Key, class Relation, class Projection>
+struct _adapter<Key, Relation, Projection>::type final
 {
-    Key key_;
+    [[no_unique_address]] Key key_;
+    [[no_unique_address]] Relation rel_;
+    [[no_unique_address]] Projection proj_;
 
-    template <ranges::forward_range Range, class Adapter>
+    template <class Range, class Adapter>
     requires(std::same_as<std::remove_cvref_t<Adapter>, type> and
              ranges::viewable_range<Range>)
     friend constexpr auto operator|(Range&& range, Adapter&& self)
     {
         return linear_search(std::forward<Range>(range),
-                             std::forward_like<Adapter>(self.key_));
+                             std::forward_like<Adapter>(self.key_),
+                             std::forward_like<Adapter>(self.rel_),
+                             std::forward_like<Adapter>(self.proj_));
     }
 };
 

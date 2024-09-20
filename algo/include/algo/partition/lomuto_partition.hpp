@@ -36,21 +36,22 @@ namespace algo
 namespace _lomuto_partition
 {
 
-constexpr auto algorithm(auto range,
-                         auto&& predicate,
-                         auto&& projection = std::identity{})
+template <class Low, class Last, class Predicate, class Projection = ranges::identity>
+requires(ranges::forward_iterator<Low> and ranges::sentinel_for<Last, Low> and
+         ranges::indirect_unary_predicate<Predicate, ranges::projected<Low, Projection>>)
+constexpr auto algorithm(Low low,
+                         Last last,
+                         Predicate&& predicate,
+                         Projection&& projection = {})
 {
-    auto low = ranges::begin(range);
-
-    for (auto& elem : range) {
-        if (predicate(projection(elem))) {
-            using std::swap;
-            swap(*low, elem);
+    auto cursor = low;
+    for (; cursor != last; ++cursor) {
+        if (predicate(projection(*cursor))) {
+            ranges::iter_swap(low, cursor);
             ++low;
         }
     }
-
-    return std::make_pair(std::move(low), std::move(range));
+    return low;
 }
 
 template <class Predicate, class Projection>
@@ -60,43 +61,162 @@ struct _adapter
 };
 
 template <class Predicate, class Projection>
-using adapter = _adapter<std::decay_t<Predicate>, std::decay_t<Projection>>::type;
+using adapter = _adapter<Predicate, Projection>::type;
 
-namespace _cpo
-{
+} // namespace _lomuto_partition
 
-struct _fn
+inline constexpr struct lomuto_partition_fn
 {
-    template <ranges::forward_range Range,
+    template <class Predicate, class Projection = std::identity>
+    requires(!ranges::range<Predicate> and !ranges::range<Projection>)
+    static constexpr auto operator()(Predicate&& predicate, Projection&& projection = {})
+        noexcept(std::is_nothrow_constructible_v<
+                 _lomuto_partition::adapter<Predicate, Projection>,
+                 Predicate,
+                 Projection>) -> _lomuto_partition::adapter<Predicate, Projection>
+    {
+        return {std::forward<Predicate>(predicate), std::forward<Projection>(projection)};
+    }
+
+    template <class Range, class Predicate, class Projection = ranges::identity>
+    requires unifex::tag_invocable<lomuto_partition_fn, Range, Predicate, Projection>
+    static constexpr auto operator()(Range&& range,
+                                     Predicate&& predicate,
+                                     Projection&& projection = {}) //
+        noexcept(unifex::is_nothrow_tag_invocable_v<lomuto_partition_fn,
+                                                    Range,
+                                                    Predicate,
+                                                    Projection>)
+            -> unifex::
+                tag_invoke_result_t<lomuto_partition_fn, Range, Predicate, Projection>
+    {
+        return tag_invoke(lomuto_partition_fn{},
+                          std::forward<Range>(range),
+                          std::forward<Predicate>(predicate),
+                          std::forward<Projection>(projection));
+    }
+
+    template <class Iter,
+              class Sentinel,
               class Predicate,
               class Projection = ranges::identity>
+    requires unifex::tag_invocable<lomuto_partition_fn,
+                                   Iter,
+                                   Sentinel,
+                                   Predicate,
+                                   Projection> and
+                 ranges::sentinel_for<Sentinel, Iter>
+    static constexpr auto operator()(Iter&& first,
+                                     Sentinel&& last,
+                                     Predicate&& predicate,
+                                     Projection&& projection = {})
+        noexcept(unifex::is_nothrow_tag_invocable_v<lomuto_partition_fn,
+                                                    Iter,
+                                                    Sentinel,
+                                                    Predicate,
+                                                    Projection>)
+            -> unifex::tag_invoke_result_t<lomuto_partition_fn,
+                                           Iter,
+                                           Sentinel,
+                                           Predicate,
+                                           Projection>
+    {
+        return tag_invoke(lomuto_partition_fn{},
+                          std::forward<Iter>(first),
+                          std::forward<Sentinel>(last),
+                          std::forward<Predicate>(predicate),
+                          std::forward<Projection>(projection));
+    }
+
+    template <class Range, class Predicate, class Projection = ranges::identity>
+    requires(not unifex::
+                 tag_invocable<lomuto_partition_fn, Range, Predicate, Projection> and
+             ranges::forward_range<Range> and
+             ranges::indirect_unary_predicate<
+                 Predicate,
+                 ranges::projected<ranges::iterator_t<Range>, Projection>> and
+             ranges::viewable_range<Range>)
     static constexpr auto operator()(Range&& range,
                                      Predicate&& predicate,
                                      Projection&& projection = {})
+        noexcept(
+            noexcept(_lomuto_partition::algorithm(ranges::begin(range),
+                                                  ranges::end(range),
+                                                  std::forward<Predicate>(predicate),
+                                                  std::forward<Projection>(projection))))
+            -> decltype(_lomuto_partition::algorithm(
+                ranges::begin(range),
+                ranges::end(range),
+                std::forward<Predicate>(predicate),
+                std::forward<Projection>(projection)))
     {
-        return tag_invoke(_fn{}, FWD(range), FWD(predicate), FWD(projection));
+        return _lomuto_partition::algorithm(ranges::begin(range),
+                                            ranges::end(range),
+                                            std::forward<Predicate>(predicate),
+                                            std::forward<Projection>(projection));
     }
 
-    template <class Predicate, class Projection = std::identity>
-    requires(!ranges::range<Predicate>)
-    static constexpr auto operator()(Predicate&& predicate, Projection&& projection = {})
+    template <class Range, class Predicate, class Projection = ranges::identity>
+    requires(not unifex::
+                 tag_invocable<lomuto_partition_fn, Range, Predicate, Projection> and
+             ranges::forward_range<Range> and
+             ranges::indirect_unary_predicate<
+                 Predicate,
+                 ranges::projected<ranges::iterator_t<Range>, Projection>> and
+             not ranges::viewable_range<Range>)
+    static constexpr auto operator()(Range range,
+                                     Predicate&& predicate,
+                                     Projection&& projection = {})
+        noexcept(
+            noexcept(_lomuto_partition::algorithm(ranges::begin(range),
+                                                  ranges::end(range),
+                                                  std::forward<Predicate>(predicate),
+                                                  std::forward<Projection>(projection))))
+            -> std::pair<ranges::iterator_t<Range>, Range>
     {
-        return adapter<Predicate, Projection>{FWD(predicate), FWD(projection)};
+        return {_lomuto_partition::algorithm(ranges::begin(range),
+                                             ranges::end(range),
+                                             std::forward<Predicate>(predicate),
+                                             std::forward<Projection>(projection)),
+                std::move(range)};
     }
 
-private:
-    friend constexpr auto tag_invoke(_fn const& /*f*/,
-                                     ranges::forward_range auto&& range,
-                                     auto&& predicate,
-                                     auto&& projection = std::identity{})
+    template <class Iter,
+              class Sentinel,
+              class Predicate,
+              class Projection = ranges::identity>
+    requires(not unifex::tag_invocable<lomuto_partition_fn,
+                                       Iter,
+                                       Sentinel,
+                                       Predicate,
+                                       Projection> and
+             ranges::forward_iterator<std::remove_cvref_t<Iter>> and
+             ranges::sentinel_for<std::remove_cvref_t<Sentinel>,
+                                  std::remove_cvref_t<Iter>> and
+             ranges::indirect_unary_predicate<Predicate,
+                                              ranges::projected<Iter, Projection>>)
+    static constexpr auto operator()(Iter&& first,
+                                     Sentinel&& last,
+                                     Predicate&& predicate,
+                                     Projection&& projection = {})
+        noexcept(
+            noexcept(_lomuto_partition::algorithm(std::forward<Iter>(first),
+                                                  std::forward<Sentinel>(last),
+                                                  std::forward<Predicate>(predicate),
+                                                  std::forward<Projection>(projection))))
+            -> decltype(_lomuto_partition::algorithm(
+                std::forward<Iter>(first),
+                std::forward<Sentinel>(last),
+                std::forward<Predicate>(predicate),
+                std::forward<Projection>(projection)))
     {
-        return algorithm(FWD(range), FWD(predicate), FWD(projection));
+        return _lomuto_partition::algorithm(std::forward<Iter>(first),
+                                            std::forward<Sentinel>(last),
+                                            std::forward<Predicate>(predicate),
+                                            std::forward<Projection>(projection));
     }
-};
-} // namespace _cpo
-} // namespace _lomuto_partition
 
-constexpr auto lomuto_partition = _lomuto_partition::_cpo::_fn{};
+} lomuto_partition;
 
 namespace _lomuto_partition
 {
@@ -107,11 +227,20 @@ struct _adapter<Predicate, Projection>::type
     Predicate pred_;
     Projection proj_;
 
-    template <class Adapter, ranges::forward_range Range>
+private:
+    template <class Range, class Adapter>
     requires std::same_as<std::remove_cvref_t<Adapter>, type>
     constexpr friend auto operator|(Range&& range, Adapter&& self)
+        noexcept(noexcept(lomuto_partition(std::forward<Range>(range),
+                                           std::forward<Predicate>(self.pred_),
+                                           std::forward<Projection>(self.proj_))))
+            -> decltype(lomuto_partition(std::forward<Range>(range),
+                                         std::forward<Predicate>(self.pred_),
+                                         std::forward<Projection>(self.proj_)))
     {
-        return tag_invoke(lomuto_partition, FWD(range), FWD(self).pred_, FWD(self).proj_);
+        return lomuto_partition(std::forward<Range>(range),
+                                std::forward<Predicate>(self.pred_),
+                                std::forward<Projection>(self.proj_));
     }
 };
 
@@ -156,21 +285,37 @@ struct _adapter
 };
 
 template <class Predicate, class Projection>
-using adapter = _adapter<std::decay_t<Predicate>, std::decay_t<Projection>>::type;
+using adapter = _adapter<Predicate, Projection>::type;
 
-namespace _cpo
-{
+} // namespace _branchless_lomuto_partition
 
-struct _fn
+inline constexpr struct branchless_lomuto_fn
 {
+    template <class Predicate, class Projection = std::identity>
+    requires(!ranges::range<Predicate> and !ranges::range<Projection>)
+    static constexpr auto operator()(Predicate&& predicate, Projection&& projection = {})
+        noexcept(std::is_nothrow_constructible_v<
+                 _branchless_lomuto_partition::adapter<Predicate, Projection>>)
+            -> _branchless_lomuto_partition::adapter<Predicate, Projection>
+    {
+        return {std::forward<Predicate>(predicate), std::forward<Projection>(projection)};
+    }
+
     template <ranges::random_access_range Range,
               class Predicate,
               class Projection = ranges::identity>
+    requires unifex::tag_invocable<branchless_lomuto_fn, Range, Predicate, Projection> and
+             ranges::indirect_unary_predicate<
+                 Predicate,
+                 ranges::projected<ranges::iterator_t<Range>, Projection>>
     static constexpr auto operator()(Range&& range,
                                      Predicate&& predicate,
                                      Projection&& projection = {})
     {
-        return tag_invoke(_fn{}, FWD(range), FWD(predicate), FWD(projection));
+        return tag_invoke(branchless_lomuto_fn{},
+                          std::forward<Range>(range),
+                          std::forward<Predicate>(predicate),
+                          std::forward<Projection>(projection));
     }
 
     template <class Itr,
@@ -178,64 +323,77 @@ struct _fn
               class Predicate,
               class Projection = ranges::identity>
     requires(
-        unifex::is_tag_invocable_v<_fn, Itr, Sentinel, Predicate, Projection> and
-        ranges::random_access_iterator<std::remove_cvref_t<Itr>> and
-        ranges::sentinel_for<std::remove_cvref_t<Sentinel>, std::remove_cvref_t<Itr>>)
+        unifex::
+            tag_invocable<branchless_lomuto_fn, Itr, Sentinel, Predicate, Projection> and
+        ranges::sentinel_for<Sentinel, Itr> and
+        ranges::indirect_unary_predicate<Predicate, ranges::projected<Itr, Projection>>)
     static constexpr auto operator()(Itr&& start,
                                      Sentinel&& end,
                                      Predicate&& predicate,
                                      Projection&& projection = {})
     {
-        return tag_invoke(_fn{},
+        return tag_invoke(branchless_lomuto_fn{},
                           std::forward<Itr>(start),
                           std::forward<Sentinel>(end),
                           std::forward<Predicate>(predicate),
                           std::forward<Projection>(projection));
     }
 
-    template <class Predicate, class Projection = std::identity>
-    requires(!ranges::range<Predicate>)
-    static constexpr auto operator()(Predicate&& predicate, Projection&& projection = {})
+    template <ranges::random_access_range Range, class Predicate, class Projection>
+    requires(not unifex::
+                 tag_invocable<branchless_lomuto_fn, Range, Predicate, Projection> and
+             ranges::indirect_unary_predicate<
+                 Predicate,
+                 ranges::projected<ranges::iterator_t<Range>, Projection>>)
+    static constexpr auto operator()(Range&& range,
+                                     Predicate&& predicate,
+                                     Projection&& projection = std::identity{})
+        noexcept(noexcept(std::pair(
+            _branchless_lomuto_partition::algorithm(ranges::begin(range),
+                                                    ranges::end(range),
+                                                    std::forward<Predicate>(predicate),
+                                                    std::forward<Projection>(projection)),
+            std::forward<Range>(range)))) -> std::pair<ranges::iterator_t<Range>, Range>
     {
-        return adapter<Predicate, Projection>{FWD(predicate), FWD(projection)};
-    }
-
-private:
-    friend constexpr auto tag_invoke(_fn const& /*f*/,
-                                     ranges::random_access_range auto&& range,
-                                     auto&& predicate,
-                                     auto&& projection = std::identity{})
-    {
-        return std::pair(algorithm(ranges::begin(range),
-                                   ranges::end(range),
-                                   FWD(predicate),
-                                   FWD(projection)),
-                         FWD(range));
+        return {
+            _branchless_lomuto_partition::algorithm(ranges::begin(range),
+                                                    ranges::end(range),
+                                                    std::forward<Predicate>(predicate),
+                                                    std::forward<Projection>(projection)),
+            std::forward<Range>(range)};
     }
 
     template <class Itr,
               class Sentinel,
               class Predicate,
               class Projection = ranges::identity>
-    requires(
-        ranges::random_access_iterator<std::remove_cvref_t<Itr>> and
-        ranges::sentinel_for<std::remove_cvref_t<Sentinel>, std::remove_cvref_t<Itr>>)
-    friend constexpr auto tag_invoke(_fn const& /*f*/,
-                                     Itr&& first,
+    requires(not unifex::tag_invocable<branchless_lomuto_fn,
+                                       Itr,
+                                       Sentinel,
+                                       Predicate,
+                                       Projection> and
+             ranges::indirect_unary_predicate<Predicate,
+                                              ranges::projected<Itr, Projection>> and
+             ranges::random_access_iterator<std::remove_cvref_t<Itr>> and
+             ranges::sentinel_for<std::remove_cvref_t<Sentinel>,
+                                  std::remove_cvref_t<Itr>>)
+    static constexpr auto operator()(Itr&& first,
                                      Sentinel&& end,
                                      Predicate&& predicate,
-                                     Projection&& projection = std::identity{})
+                                     Projection&& projection = {})
+        noexcept(noexcept(_branchless_lomuto_partition::algorithm(
+            std::forward<Itr>(first),
+            std::forward<Sentinel>(end),
+            std::forward<Predicate>(predicate),
+            std::forward<Projection>(projection)))) -> std::remove_cvref_t<Itr>
     {
-        return algorithm(std::forward<Itr>(first),
-                         std::forward<Sentinel>(end),
-                         std::forward<Predicate>(predicate),
-                         std::forward<Projection>(projection));
+        return _branchless_lomuto_partition::algorithm(
+            std::forward<Itr>(first),
+            std::forward<Sentinel>(end),
+            std::forward<Predicate>(predicate),
+            std::forward<Projection>(projection));
     }
-};
-} // namespace _cpo
-} // namespace _branchless_lomuto_partition
-
-constexpr auto branchless_lomuto_partition = _branchless_lomuto_partition::_cpo::_fn{};
+} branchless_lomuto_partition;
 
 namespace _branchless_lomuto_partition
 {
@@ -248,10 +406,17 @@ struct _adapter<Predicate, Projection>::type
 
     template <class Adapter, ranges::random_access_range Range>
     requires std::same_as<std::remove_cvref_t<Adapter>, type>
-    constexpr friend auto operator|(Range&& range, Adapter&& self)
+    constexpr friend auto operator|(Range&& range, Adapter&& self) noexcept(
+        noexcept(branchless_lomuto_partition(std::forward<Range>(range),
+                                             std::forward<Predicate>(self.pred_),
+                                             std::forward<Projection>(self.proj_))))
+        -> decltype(branchless_lomuto_partition(std::forward<Range>(range),
+                                                std::forward<Predicate>(self.pred_),
+                                                std::forward<Projection>(self.proj_)))
     {
-        return tag_invoke(
-            branchless_lomuto_partition, FWD(range), FWD(self).pred_, FWD(self).proj_);
+        return branchless_lomuto_partition(std::forward<Range>(range),
+                                           std::forward<Predicate>(self.pred_),
+                                           std::forward<Projection>(self.proj_));
     }
 };
 

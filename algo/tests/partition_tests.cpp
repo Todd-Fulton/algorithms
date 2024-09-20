@@ -29,7 +29,7 @@ TEST(Partitions, LomutoPartition_vector_int)
 
     EXPECT_TRUE(ranges::is_partitioned(
         std::get<1>(rand_range<vector>(0, 50) | algo::lomuto_partition(pred)),
-        pred));
+        pred)); // NOLINT
 }
 
 TEST(Partitions, LomutoPartition_list_int)
@@ -37,17 +37,17 @@ TEST(Partitions, LomutoPartition_list_int)
     constexpr auto pred = [](auto const& x) { return x <= 20; };
 
     EXPECT_TRUE(ranges::is_partitioned(
-        std::get<1>(rand_range<list>(0, 50) | algo::lomuto_partition(pred)), pred));
+        std::get<1>(rand_range<list>(0, 50) | algo::lomuto_partition(pred)),
+        pred)); // NOLINT
 }
 
 TEST(Partitions, BranchlessLomutoPartition_vector_int)
 {
     constexpr auto pred = [](auto const& x) { return x <= 20; };
 
-    EXPECT_TRUE(
-        ranges::is_partitioned(std::get<1>(rand_range<vector>(0, 50) |
-                                           algo::branchless_lomuto_partition(pred)),
-                               pred));
+    EXPECT_TRUE(ranges::is_partitioned(
+        std::get<1>(rand_range<vector>(0, 50) | algo::branchless_lomuto_partition(pred)),
+        pred)); // NOLINT
 }
 
 TEST(Partitions, HoarePartition_vector_int)
@@ -55,7 +55,8 @@ TEST(Partitions, HoarePartition_vector_int)
     constexpr auto pred = [](auto const& x) { return x <= 20; };
 
     EXPECT_TRUE(ranges::is_partitioned(
-        std::get<1>(rand_range<vector>(0, 50) | algo::hoare_partition(pred)), pred));
+        std::get<1>(rand_range<vector>(0, 50) | algo::hoare_partition(pred)),
+        pred)); // NOLINT
 }
 
 TEST(Partitions, HoarePartition_vector_int_iterators)
@@ -76,7 +77,7 @@ TEST(Partitions, AlexandrescuPartition_vector_int)
 
     auto [part, output] = original | algo::alexandrescu_partition(pred);
 
-    auto is_partitioned = ranges::is_partitioned(output, pred);
+    auto is_partitioned = ranges::is_partitioned(output, pred); // NOLINT
 
     EXPECT_TRUE(is_partitioned);
     if (!is_partitioned) {
@@ -118,8 +119,8 @@ TEST(Partitions, AlexandrescuPartition_vector_int_Degenerate)
     ranges::iter_swap(begin(range), prev(end(range)));
 
     EXPECT_TRUE(ranges::is_partitioned(
-        std::get<1>(ranges::views::all(range) | algo::alexandrescu_partition(pred)),
-        pred));
+        std::get<1>(ranges::views::all(range) 
+            | algo::alexandrescu_partition(pred)), pred)); // NOLINT
 
     auto new_pivot = ranges::partition_point(range, pred);
 

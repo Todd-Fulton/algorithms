@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include "algo/sort/sorted.hpp"
 #include <algo/sort/ordering.hpp>
 
 #include <range/v3/range.hpp>
@@ -51,200 +52,176 @@ namespace _binary_search
  * @param cmp a comparison function
  * @return an iterator to the element, or nullopt
  */
-template <std::forward_iterator Itr,
+template <std::random_access_iterator Itr,
           ranges::sentinel_for<Itr> Sentinel,
-          class CMP = std::less<>>
-auto algorithm(Itr start,
-               Sentinel end,
-               std::iter_value_t<Itr> const& key,
-               CMP cmp = CMP{}) -> Itr
+          class Key,
+          class Relation,
+          class Projection>
+auto algorithm(
+    Itr front, Sentinel back, Key const& key, Relation&& cmp, Projection&& proj) -> Itr
 {
-    using std::distance;
+    auto dist = ranges::distance(front, back) - 1;
+    auto last = front + dist;
 
-    Itr last = start;
-    std::iter_difference_t<Itr> dist{0};
-    if constexpr (std::random_access_iterator<Itr>) {
-        dist = std::iter_difference_t<Itr>(distance(start, end)) - 1;
-        last += dist;
-    }
-    else {
-        auto cursor = last;
-        while (cursor != end) {
-            last = cursor;
-            ++cursor;
-            ++dist;
-        }
-    }
-
-    while (start != last) {
-        Itr mitr;
+    while (front != last) {
         dist /= 2;
-        if constexpr (std::random_access_iterator<Itr>) {
-            mitr = start + dist;
-        }
-        else {
-            mitr = start;
-            auto mid = dist;
-            while (mid) {
-                ++mitr;
-                --mid;
-            }
-        }
-        if (cmp(*mitr, key)) {
-            start = mitr;
-            ++start;
+        auto mitr = front + dist;
+        if (cmp(proj(*mitr), proj(key))) {
+            front = mitr;
+            ++front;
         }
         else {
             last = mitr;
         }
     }
-    if (start == last && cmp(*start, key)) {
-        ++start;
+    if (front == last && cmp(proj(*front), proj(key))) {
+        ++front;
     }
 
-    return start;
+    return front;
 }
 
-// TODO: Dont use ordering, use a custom type for searching that
-// represents if we should insert before or after
+} // namespace _binary_search
 
 /**
- * `_adapter` is a class template that provides an adapter for binary search algorithms.
- * It has a nested `type` struct that defines the actual adapter type. This adapter type
- * can be used with the `|` operator to pipe a range into a binary search algorithm.
+ * `binary_search_fn` is a tag-invocable object for binary search algorithms.
+ * This object can be used with the `|` operator to pipe a range into a
+ * binary search algorithm.
  */
-template <class Key, class Ordering>
-struct _adapter final
+constexpr struct binary_search_fn
 {
-    struct type;
-};
-
-template <class Key, class Ordering>
-using adapter = _adapter<Key, std::remove_cvref_t<Ordering>>::type;
-
-/**
- * `_cpo` is a namespace that contains a struct called `_fn`, which is a tag-invocable
- * object for binary search algorithms. This struct has overloaded `operator()` functions
- * that take different arguments, including ranges and iterators. The overloads of
- * `operator()` are used to provide the binary search algorithm functionality.
- */
-namespace _cpo
-{
-constexpr struct _fn
-{
-
-    // TODO: Better refinement
-    template <class Key, class Ordering>
-    requires(!(ranges::range<Key> or ranges::view_<Key>))
-    static constexpr auto operator()(Key&& key, Ordering&& ord)
-    {
-        return adapter<Key, Ordering>{std::forward<Key>(key),
-                                      std::forward<Ordering>(ord)};
-    }
-
     template <ranges::forward_range Range,
               class Key,
-              class Ordering = ordering::ascending>
-    requires(unifex::tag_invocable<_fn, Range, Key, Ordering> and
-             ranges::viewable_range<Range>)
-    static constexpr auto operator()(Range&& range, Key&& key, Ordering&& ordering = {})
+              class Relation = ordering::ascending_fn,
+              class Projection = ranges::identity>
+    requires(unifex::tag_invocable<binary_search_fn, Range, Key, Relation, Projection>)
+    static constexpr auto operator()(Range&& range,
+                                     Key&& key,
+                                     Relation&& rel = {},
+                                     Projection&& proj = {}) //
+        noexcept(unifex::is_nothrow_tag_invocable_v<binary_search_fn,
+                                                    Range,
+                                                    Key,
+                                                    Relation,
+                                                    Projection>)
+            -> unifex::
+                tag_invoke_result_t<binary_search_fn, Range, Key, Relation, Projection>
     {
-        return tag_invoke(_fn{},
-                          std::forward<Range>(range),
-                          std::forward<Key>(key),
-                          std::forward<Ordering>(ordering));
+        return unifex::tag_invoke(binary_search_fn{},
+                                  std::forward<Range>(range),
+                                  std::forward<Key>(key),
+                                  std::forward<Relation>(rel),
+                                  std::forward<Projection>(proj));
     }
+
     template <std::forward_iterator Itr,
               ranges::sentinel_for<Itr> Sentinel,
               class Key,
-              class Ordering = ordering::ascending>
-    requires(unifex::tag_invocable<_fn, Itr, Sentinel, Key, Ordering>)
+              class Relation = ordering::ascending_fn,
+              class Projection = ranges::identity>
+    requires(unifex::tag_invocable<binary_search_fn,
+                                   Itr,
+                                   Sentinel,
+                                   Key,
+                                   Relation,
+                                   Projection>)
     static constexpr auto operator()(Itr&& first,
                                      Sentinel&& end,
                                      Key&& key,
-                                     Ordering&& ordering = {})
+                                     Relation&& rel = {},
+                                     Projection&& proj = {})
+        noexcept(unifex::is_nothrow_tag_invocable_v<binary_search_fn,
+                                                    Itr,
+                                                    Sentinel,
+                                                    Key,
+                                                    Relation,
+                                                    Projection>)
+            -> unifex::tag_invoke_result_t<binary_search_fn,
+                                           Itr,
+                                           Sentinel,
+                                           Key,
+                                           Relation,
+                                           Projection>
     {
-        return tag_invoke(_fn{},
+        return tag_invoke(binary_search_fn{},
                           std::forward<Itr>(first),
                           std::forward<Sentinel>(end),
                           std::forward<Key>(key),
-                          std::forward<Ordering>(ordering));
+                          std::forward<Relation>(rel),
+                          std::forward<Projection>(proj));
     }
 
-private:
-    template <ranges::forward_range Range, class Key, class Ordering>
-    requires(ranges::viewable_range<Range> and ranges::sized_range<Range>)
-    friend constexpr auto tag_invoke([[maybe_unused]] _fn const& /*unused*/,
-                                     Range&& range,
-                                     Key&& key,
-                                     [[maybe_unused]] Ordering const& /*ordering*/)
-    {
-        if constexpr (ranges::common_range<Range>) {
-            return algorithm(ranges::begin(range),
-                             ranges::end(range),
-                             std::forward<Key>(key),
-                             predicate_for_t<Ordering, RNG_VALUE_T(range)>{});
-        }
-        else {
-
-            auto vi = ranges::views::common(std::forward<Range>(range));
-            return algorithm(ranges::begin(vi),
-                             ranges::end(vi),
-                             std::forward<Key>(key),
-                             predicate_for_t<Ordering, RNG_VALUE_T(range)>{});
-        }
-    }
-
-    template <std::forward_iterator Itr,
-              ranges::sentinel_for<Itr> Sentinel,
+    template <class Range,
               class Key,
-              class Ordering>
-    friend constexpr auto tag_invoke([[maybe_unused]] _fn const& /*unused*/,
-                                     Itr&& first,
+              class Relation = ordering::ascending_fn,
+              class Projection = ranges::identity>
+    requires(not unifex::
+                 tag_invocable<binary_search_fn, Range, Key, Relation, Projection> and
+             not Sorted<Range> and ranges::random_access_range<Range> and
+             ranges::sized_range<Range> and ranges::viewable_range<Range>)
+    static constexpr auto operator()(Range&& range,
+                                     Key&& key,
+                                     Relation&& rel = {},
+                                     Projection&& proj = {})
+        noexcept(noexcept(_binary_search::algorithm(ranges::begin(range),
+                                                    ranges::end(range),
+                                                    std::forward<Key>(key),
+                                                    std::forward<Relation>(rel),
+                                                    std::forward<Projection>(proj))))
+            -> decltype(_binary_search::algorithm(ranges::begin(range),
+                                                  ranges::end(range),
+                                                  std::forward<Key>(key),
+                                                  std::forward<Relation>(rel),
+                                                  std::forward<Projection>(proj)))
+    {
+        return _binary_search::algorithm(ranges::begin(range),
+                                         ranges::end(range),
+                                         std::forward<Key>(key),
+                                         std::forward<Relation>(rel),
+                                         std::forward<Projection>(proj));
+    }
+
+    template <Sorted Range, class Key>
+    constexpr auto operator()(Range&& range, Key&& key) const noexcept(noexcept((*this)(
+        range.base(), std::forward<Key>(key), range.relation(), range.projection())))
+        -> decltype((*this)(
+            range.base(), std::forward<Key>(key), range.relation(), range.projection()))
+    {
+        return (*this)(
+            range.base(), std::forward<Key>(key), range.relation(), range.projection());
+    }
+
+    template <class Itr,
+              class Sentinel,
+              class Key,
+              class Relation = ordering::ascending_fn,
+              class Projection = ranges::identity>
+    requires(not unifex::
+                 tag_invocable<binary_search_fn, Itr, Sentinel, Relation, Projection> and
+             ranges::random_access_iterator<Itr> and ranges::sentinel_for<Sentinel, Itr>)
+    static constexpr auto operator()(Itr&& first,
                                      Sentinel&& end,
                                      Key&& key,
-                                     [[maybe_unused]] Ordering const& /*ordering*/)
+                                     Relation&& rel = {},
+                                     Projection&& proj = {})
+        noexcept(noexcept(_binary_search::algorithm(std::forward<Itr>(first),
+                                                    std::forward<Sentinel>(end),
+                                                    std::forward<Key>(key),
+                                                    std::forward<Relation>(rel),
+                                                    std::forward<Projection>(proj))))
+            -> decltype(_binary_search::algorithm(std::forward<Itr>(first),
+                                                  std::forward<Sentinel>(end),
+                                                  std::forward<Key>(key),
+                                                  std::forward<Relation>(rel),
+                                                  std::forward<Projection>(proj)))
     {
-        return algorithm(std::forward<Itr>(first),
-                         std::forward<Sentinel>(end),
-                         std::forward<Key>(key),
-                         predicate_for_t<Ordering, ITR_VALUE_T(first)>{});
+        return _binary_search::algorithm(std::forward<Itr>(first),
+                                         std::forward<Sentinel>(end),
+                                         std::forward<Key>(key),
+                                         std::forward<Relation>(rel),
+                                         std::forward<Projection>(proj));
     }
 } binary_search;
-} // namespace _cpo
-
-} // namespace _binary_search
-
-/**
- * `binary_search` is an alias for `_cpo::binary_search`, which is a tag-invocable object
- * for binary search algorithms. This object can be used with the `|` operator to pipe a
- * range into a binary search algorithm.
- */
-using _binary_search::_cpo::binary_search;
-
-namespace _binary_search
-{
-
-template <class Key, class Ordering>
-struct _adapter<Key, Ordering>::type final
-{
-    Key key_;
-
-    template <ranges::forward_range Range, class Adapter>
-    requires(std::same_as<std::remove_cvref_t<Adapter>, type> and
-             ranges::viewable_range<Range> and ranges::sized_range<Range>)
-    friend constexpr auto operator|(Range&& range, Adapter&& self)
-    {
-        return binary_search(std::forward<Range>(range),
-                             std::forward_like<Adapter>(self.key_),
-                             Ordering{});
-    }
-
-    // TODO: Take a std::pair<Itr, Sent> as pipe?
-    // TODO: Take a pipable as pipe and compose?
-};
-
-} // namespace _binary_search
 
 } // namespace algo
 

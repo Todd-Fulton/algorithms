@@ -27,23 +27,18 @@
 
 #include <algo/prelude.hpp>
 
-#define ITR_VALUE_T(itr) std::iter_value_t<decltype(itr)>
-#define REMOVE_CVREF_T(var) std::remove_cvref_t<decltype(var)>
-
 namespace algo
 {
 namespace _hoare_partition
 {
-template <std::bidirectional_iterator Iter1, std::bidirectional_iterator Iter2>
-constexpr auto
-algorithm(Iter1 first, Iter2 last, auto&& predicate, auto&& projection) noexcept(
-    std::is_nothrow_move_assignable_v<ITR_VALUE_T(first)> and
-    std::is_nothrow_invocable_v<decltype(projection), ITR_VALUE_T(first)> and
-    std::is_nothrow_invocable_v<
-        decltype(predicate),
-        std::invoke_result_t<decltype(projection), ITR_VALUE_T(first)>>) -> Iter1
+constexpr auto algorithm(auto first, auto last, auto&& predicate, auto&& projection)
+    noexcept(std::is_nothrow_move_assignable_v<ITR_VALUE_T(first)> and
+             std::is_nothrow_invocable_v<decltype(projection), ITR_VALUE_T(first)> and
+             std::is_nothrow_invocable_v<
+                 decltype(predicate),
+                 std::invoke_result_t<decltype(projection), ITR_VALUE_T(first)>>) -> auto
 {
-    Iter1 ret = last;
+    auto ret = last;
     if (ranges::distance(first, last) < 2) {
         ret = last;
     }
@@ -87,10 +82,24 @@ struct _adapter
 template <class Predicate, class Projection>
 using adapter = _adapter<std::decay_t<Predicate>, std::decay_t<Projection>>::type;
 
-namespace _cpo
-{
+} // namespace _hoare_partition
 
-struct _fn
+/**
+ * Partition a range of elements according to predicate.
+ *
+ * Computes the partition around predicate(x) -> true
+ * using Hoare's partition scheme.
+ *
+ * Ex: [0, 2, 10, 2, 5, 9, 6, 8, 7, 3]
+ *  is permuted to [0, 2, 3, 2, 5 * 6, 8, 7, 10, 9]
+ *  around the predicate (x < 6)
+ *
+ *  A partition function may be supplied to, for example,
+ *  project into a tuple or a structure.
+ *
+ * Ex: snd(x : tuple<int, float>) -> float
+ */
+inline constexpr struct hoare_partition_fn
 {
     /**
      * @brief Partition `range` according to predicate.
@@ -124,17 +133,25 @@ struct _fn
      * @return a pair (iterator, range) where the iterator points to the
      * element where successor elements begin.
      */
-    template <ranges::bidirectional_range Range,
-              class Predicate,
-              class Projection = ranges::identity>
-    requires ranges::indirect_unary_predicate<
-        Predicate,
-        ranges::projected<ranges::iterator_t<Range>, Projection>>
-    constexpr auto operator()(Range&& range,
-                              Predicate&& predicate,
-                              Projection&& projection = {}) const
+    template <class Range, class Predicate, class Projection = ranges::identity>
+    requires unifex::tag_invocable<hoare_partition_fn, Range, Predicate, Projection> and
+                 ranges::indirect_unary_predicate<
+                     Predicate,
+                     ranges::projected<ranges::iterator_t<Range>, Projection>>
+    static constexpr auto operator()(
+        Range&& range,
+        Predicate&& predicate,
+        Projection&& projection =
+            {}) noexcept(unifex::is_nothrow_tag_invocable_v<hoare_partition_fn,
+                                                            Range,
+                                                            Predicate,
+                                                            Projection>)
+        -> unifex::tag_invoke_result_t<hoare_partition_fn, Range, Predicate, Projection>
     {
-        return tag_invoke(*this, FWD(range), FWD(predicate), FWD(projection));
+        return tag_invoke(hoare_partition_fn{},
+                          std::forward<Range>(range),
+                          std::forward<Predicate>(predicate),
+                          std::forward<Projection>(projection));
     }
 
     /**
@@ -167,91 +184,93 @@ struct _fn
      * @return an iterator where the iterator points to the
      * element where successor elements begin.
      */
-    template <std::bidirectional_iterator Iter1,
-              std::bidirectional_iterator Iter2,
-              class Predicate,
-              class Projection = ranges::identity>
-    requires ranges::indirect_unary_predicate<Predicate,
-                                              ranges::projected<Iter1, Projection>>
-    constexpr auto operator()(Iter1&& first,
-                              Iter2&& last,
-                              Predicate&& predicate,
-                              Projection&& projection = {}) const
+    template <class Iter, class Predicate, class Projection = ranges::identity>
+    requires unifex::tag_invocable<hoare_partition_fn,
+                                   Iter,
+                                   Iter,
+                                   Predicate,
+                                   Projection> and
+                 ranges::indirect_unary_predicate<Predicate,
+                                                  ranges::projected<Iter, Projection>>
+    static constexpr auto operator()(Iter&& first,
+                                     Iter&& last,
+                                     Predicate&& predicate,
+                                     Projection&& projection = {})
+        noexcept(unifex::is_nothrow_tag_invocable_v<hoare_partition_fn,
+                                                    Iter,
+                                                    Iter,
+                                                    Predicate,
+                                                    Projection>)
+            -> unifex::
+                tag_invoke_result_t<hoare_partition_fn, Iter, Iter, Predicate, Projection>
     {
         return tag_invoke(
-            *this, FWD(first), FWD(last), FWD(predicate), FWD(projection));
-    }
-    template <class Predicate, class Projection = ranges::identity>
-    requires(!ranges::range<Predicate>)
-    static constexpr auto operator()(Predicate&& predicate,
-                                     Projection&& projection = {})
-    {
-        return adapter<Predicate, Projection>{FWD(predicate), FWD(projection)};
+            hoare_partition_fn{}, FWD(first), FWD(last), FWD(predicate), FWD(projection));
     }
 
-private:
+    template <class Predicate, class Projection = ranges::identity>
+    requires(!ranges::range<Predicate>)
+    static constexpr auto operator()(Predicate&& predicate, Projection&& projection = {})
+        noexcept(std::is_nothrow_constructible_v<
+                 _hoare_partition::adapter<Predicate, Projection>,
+                 Predicate,
+                 Projection>) -> _hoare_partition::adapter<Predicate, Projection>
+    {
+        return {std::forward<Predicate>(predicate), std::forward<Projection>(projection)};
+    }
+
     template <ranges::bidirectional_range Range,
               class Predicate,
               class Projection = ranges::identity>
-    requires ranges::indirect_unary_predicate<
-        Predicate,
-        ranges::projected<ranges::iterator_t<Range>, Projection>>
-    friend constexpr auto tag_invoke(
-        _fn const& /*f*/,
-        Range&& range,
-        Predicate&& predicate,
-        Projection&& projection =
-            ranges::identity{}) noexcept(noexcept(std::pair(algorithm(begin(range),
-                                                                   end(range),
-                                                                   FWD(predicate),
-                                                                   FWD(projection)),
-                                                         FWD(range))))
-        -> std::pair<RNG_ITR_T(range), std::remove_cvref_t<Range>>
+    requires(not unifex::
+                 tag_invocable<hoare_partition_fn, Range, Predicate, Projection> and
+             ranges::indirect_unary_predicate<
+                 Predicate,
+                 ranges::projected<ranges::iterator_t<Range>, Projection>>)
+    static constexpr auto operator()(Range&& range,
+                                     Predicate&& predicate,
+                                     Projection&& projection = ranges::identity{})
+        noexcept(noexcept(
+            std::pair(_hoare_partition::algorithm(begin(range),
+                                                  end(range),
+                                                  std::forward<Predicate>(predicate),
+                                                  std::forward<Projection>(projection)),
+                      std::forward<Range>(range))))
+            -> std::pair<RNG_ITR_T(range), std::remove_cvref_t<Range>>
     {
-        return std::pair(
-            algorithm(begin(range), end(range), FWD(predicate), FWD(projection)),
-            FWD(range));
+        return {_hoare_partition::algorithm(begin(range),
+                                            end(range),
+                                            std::forward<Predicate>(predicate),
+                                            std::forward<Projection>(projection)),
+                std::forward<Range>(range)};
     }
 
-    template <std::bidirectional_iterator Iter1,
-              std::bidirectional_iterator Iter2,
-              class Predicate,
-              class Projection = ranges::identity>
-    requires ranges::indirect_unary_predicate<Predicate,
-                                              ranges::projected<Iter1, Projection>>
-    friend constexpr auto tag_invoke(
-        _fn const& /*f*/,
-        Iter1&& first,
-        Iter2&& last,
-        Predicate&& predicate,
-        Projection&& projection =
-            ranges::identity{}) noexcept(noexcept(algorithm(FWD(first),
-                                                         FWD(last),
-                                                         FWD(predicate),
-                                                         FWD(projection)))) -> Iter1
+    template <class Iter, class Predicate, class Projection = ranges::identity>
+    requires(not unifex::
+                 tag_invocable<hoare_partition_fn, Iter, Iter, Predicate, Projection> and
+             ranges::bidirectional_iterator<std::remove_cvref_t<Iter>> and
+             ranges::indirect_unary_predicate<Predicate,
+                                              ranges::projected<Iter, Projection>>)
+    static constexpr auto operator()(Iter&& first,
+                                     Iter&& last,
+                                     Predicate&& predicate,
+                                     Projection&& projection = ranges::identity{})
+        noexcept(
+            noexcept(_hoare_partition::algorithm(std::forward<Iter>(first),
+                                                 std::forward<Iter>(last),
+                                                 std::forward<Predicate>(predicate),
+                                                 std::forward<Projection>(projection))))
+            -> decltype(_hoare_partition::algorithm(std::forward<Iter>(first),
+                                                    std::forward<Iter>(last),
+                                                    std::forward<Predicate>(predicate),
+                                                    std::forward<Projection>(projection)))
     {
-        return algorithm(FWD(first), FWD(last), FWD(predicate), FWD(projection));
+        return _hoare_partition::algorithm(std::forward<Iter>(first),
+                                           std::forward<Iter>(last),
+                                           std::forward<Predicate>(predicate),
+                                           std::forward<Projection>(projection));
     }
-};
-} // namespace _cpo
-} // namespace _hoare_partition
-
-/**
- * Partition a range of elements according to predicate.
- *
- * Computes the partition around predicate(x) -> true
- * using Hoare's partition scheme.
- *
- * Ex: [0, 2, 10, 2, 5, 9, 6, 8, 7, 3]
- *  is permuted to [0, 2, 3, 2, 5 * 6, 8, 7, 10, 9]
- *  around the predicate (x < 6)
- *
- *  A partition function may be supplied to, for example,
- *  project into a tuple or a structure.
- *
- * Ex: snd(x : tuple<int, float>) -> float
- */
-constexpr auto hoare_partition = _hoare_partition::_cpo::_fn{};
+} hoare_partition;
 
 namespace _hoare_partition
 {
@@ -264,25 +283,23 @@ struct _adapter<Predicate, Projection>::type
 
     template <class Adapter, ranges::bidirectional_range Range>
     requires std::same_as<std::remove_cvref_t<Adapter>, type> and
-             ranges::indirect_unary_predicate<
-                 Predicate,
-                 ranges::projected<ranges::iterator_t<Range>, Projection>>
-    constexpr friend auto operator|(Range&& range, Adapter&& self) noexcept(
-        unifex::is_nothrow_tag_invocable_v<unifex::tag_t<hoare_partition>,
-                                           Range,
-                                           decltype(FWD(self).pred_),
-                                           decltype(FWD(self).proj_)>)
-        -> unifex::tag_invoke_result_t<unifex::tag_t<hoare_partition>,
-                                       Range,
-                                       decltype(FWD(self).pred_),
-                                       decltype(FWD(self).proj_)>
+                 ranges::indirect_unary_predicate<
+                     Predicate,
+                     ranges::projected<ranges::iterator_t<Range>, Projection>>
+    constexpr friend auto operator|(Range&& range, Adapter&& self)
+        noexcept(noexcept(hoare_partition(std::forward<Range>(range),
+                                          std::forward<Predicate>(self.pred_),
+                                          std::forward<Projection>(self.proj_))))
+            -> decltype(hoare_partition(std::forward<Range>(range),
+                                        std::forward<Predicate>(self.pred_),
+                                        std::forward<Projection>(self.proj_)))
     {
-        return tag_invoke(
-            hoare_partition, FWD(range), FWD(self).pred_, FWD(self).proj_);
+        return hoare_partition(std::forward<Range>(range),
+                               std::forward<Predicate>(self.pred_),
+                               std::forward<Projection>(self.proj_));
     }
 };
 } // namespace _hoare_partition
-
 
 } // namespace algo
 

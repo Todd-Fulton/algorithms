@@ -18,13 +18,14 @@
 
 #pragma once
 
+#include "ordering.hpp"
+#include "sorted.hpp"
+
 #include <range/v3/iterator/concepts.hpp>
 #include <range/v3/range/concepts.hpp>
 #include <range/v3/range_concepts.hpp>
 #include <type_traits>
 #include <unifex/tag_invoke.hpp>
-
-#include "ordering.hpp"
 
 namespace algo
 {
@@ -33,7 +34,7 @@ namespace _insertion_sort
 {
 
 template <class T>
-auto&& move_or_copy(T&& val)
+T&& move_or_copy(T&& val)
 {
     if constexpr (std::is_nothrow_move_assignable_v<std::remove_cvref_t<T>>
                   // don't move word size things
@@ -54,10 +55,17 @@ auto&& move_or_copy(T&& val)
  * @param cmp A comparison function. Use less for ascending order and
  * greater for descending order.
  */
-template <std::forward_iterator Itr,
-          ranges::sentinel_for<Itr> Sentinel,
-          class CMP = std::less<>>
-void algorithm(Itr start, Sentinel end, CMP const& compare = {})
+template <class Itr, class Sentinel, class Relation, class Projection>
+requires(ranges::forward_iterator<Itr> and
+         !(ranges::bidirectional_iterator<Itr> or ranges::random_access_iterator<Itr>) and
+         ranges::sentinel_for<Sentinel, Itr> and
+         ranges::indirect_strict_weak_order<Relation,
+                                            ranges::projected<Itr, Projection>,
+                                            ranges::projected<Itr, Projection>>)
+void algorithm(Itr start,
+               Sentinel end,
+               Relation const& relation,
+               Projection const& projection)
     noexcept(std::is_nothrow_swappable_v<std::iter_value_t<Itr>>)
 {
     using std::swap;
@@ -72,11 +80,10 @@ void algorithm(Itr start, Sentinel end, CMP const& compare = {})
     // TODO: Document loop invariants.
     for (; key_itr != end; ++key_itr) {
         // use first element of right range as key to sort into left range
-        auto key = move_or_copy(*key_itr);
 
         // find position of key in left range
         auto i = start;
-        while (!compare(key, *i) and i != key_itr) {
+        while (relation(projection(*key_itr), projection(*i)) and i != key_itr) {
             ++i;
         }
 
@@ -84,131 +91,195 @@ void algorithm(Itr start, Sentinel end, CMP const& compare = {})
         // TODO: if RNG is contiguous and value_type is trivially
         // relocatable then use memcpy
         if (i != key_itr) {
-            auto tmp{move_or_copy(*i)};
-
             auto j = i;
-            ++j;
             do { // NOLINT
-                swap(tmp, *j);
-                if (j == key_itr) {
-                    break;
-                }
-                else {
-                    ++j;
-                }
-            } while (true);
+                ++j;
+                ranges::iter_swap(i, j);
+            } while (j != key_itr);
         }
 
         // insert key into i
-        swap(key, *i);
+        ranges::iter_swap(key_itr, i);
     }
 }
 
-template <class Ordering>
+template <class Itr, class Sentinel, class Relation, class Projection>
+requires(ranges::bidirectional_iterator<std::remove_cvref_t<Itr>> and
+         ranges::sentinel_for<std::remove_cvref_t<Sentinel>, std::remove_cvref_t<Itr>> and
+         ranges::indirect_strict_weak_order<Relation,
+                                   ranges::projected<Itr, Projection>,
+                                   ranges::projected<Itr, Projection>>)
+void algorithm(Itr start,
+               Sentinel end,
+               Relation const& relation,
+               Projection const& projection)
+    noexcept(std::is_nothrow_swappable_v<std::iter_value_t<Itr>>)
+{
+    if (start == end) {
+        return;
+    }
+    auto key_itr=start;
+    ++key_itr;
+    for (; key_itr != end; ++key_itr) {
+        auto key{move_or_copy(*key_itr)};
+        auto j = key_itr;
+        auto i = j;
+        --i;
+        for (; j != start and relation(projection(key), projection(*i));
+             --i, --j) {
+            *j = move_or_copy(*i);
+        }
+
+        *j = move_or_copy(key);
+    }
+}
+
+template <class Relation, class Projection>
 struct _adapter
 {
     struct type;
 };
 
-template <class Ordering>
-using adapter = _adapter<Ordering>::type;
+template <class Ordering, class Projection>
+using adapter = _adapter<std::decay_t<Ordering>, std::decay_t<Projection>>::type;
 
-namespace _cpo
-{
-inline constexpr struct _fn
-{
-    template <class Ordering = ordering::ascending>
-    requires(!ranges::range<Ordering> and !ranges::view_<Ordering>)
-    static constexpr auto operator()(Ordering&& ordering = {})
-    {
-        return adapter<Ordering>{std::forward<Ordering>(ordering)};
-    }
-
-    template <ranges::forward_range Range, class Ordering = ordering::ascending>
-    requires(unifex::tag_invocable<_fn, Range, Ordering>)
-    static constexpr auto operator()(Range&& range, Ordering&& ordering = {})
-        noexcept(unifex::is_nothrow_tag_invocable_v<_fn, decltype(range), Ordering>)
-            -> unifex::tag_invoke_result_t<_fn, Range, Ordering>
-    {
-        return tag_invoke(
-            _fn{}, std::forward<Range>(range), std::forward<Ordering>(ordering));
-    }
-
-    template <class Itr, class Sentinel, class Ordering = ordering::ascending>
-    requires(
-        unifex::tag_invocable<_fn, Itr, Sentinel, Ordering> and
-        ranges::forward_iterator<std::remove_cvref_t<Itr>> and
-        ranges::sentinel_for<std::remove_cvref_t<Sentinel>, std::remove_cvref_t<Itr>>)
-    static constexpr auto operator()(Itr&& start,
-                                     Sentinel&& end,
-                                     Ordering&& ordering = Ordering{})
-        noexcept(unifex::is_nothrow_tag_invocable_v<_fn, Itr, Sentinel, Ordering>)
-    {
-        return tag_invoke(_fn{},
-                          std::forward<Itr>(start),
-                          std::forward<Sentinel>(end),
-                          std::forward<Ordering>(ordering));
-    }
-
-private:
-    template <class Itr, class Sentinel, class Ordering = ordering::ascending>
-    requires(
-        ranges::forward_iterator<std::remove_cvref_t<Itr>> and
-        ranges::sentinel_for<std::remove_cvref_t<Sentinel>, std::remove_cvref_t<Itr>>)
-    friend constexpr void tag_invoke(_fn /*unused*/,
-                                     Itr&& start,
-                                     Sentinel&& end,
-                                     Ordering&& /**/ = {})
-        noexcept(noexcept(_insertion_sort::algorithm(
-            std::forward<Itr>(start),
-            std::forward<Sentinel>(end),
-            predicate_for_t<Ordering, std::iter_value_t<Itr>>{})))
-    {
-        _insertion_sort::algorithm(std::forward<Itr>(start),
-                                   std::forward<Sentinel>(end),
-                                   predicate_for_t<Ordering, std::iter_value_t<Itr>>{});
-    }
-
-    template <ranges::forward_range Range, class Ordering = ordering::ascending>
-    friend constexpr auto tag_invoke(_fn /*unused*/, Range&& range, Ordering&& /**/ = {})
-        noexcept(noexcept(_insertion_sort::algorithm(
-            begin(range),
-            end(range),
-            predicate_for_t<Ordering, ranges::range_value_t<Range>>{})))
-            -> decltype(std::forward<Range>(range))
-    {
-        _insertion_sort::algorithm(
-            begin(range),
-            end(range),
-            predicate_for_t<Ordering, ranges::range_value_t<Range>>{});
-        return std::forward<Range>(range);
-    }
-} insertion_sort;
-} // namespace _cpo
 } // namespace _insertion_sort
 
-using _insertion_sort::_cpo::insertion_sort;
+inline constexpr struct insertion_sort_fn
+{
+    template <class Relation = unifex::tag_t<ordering::ascending>,
+              class Projection = ranges::identity>
+    requires(!ranges::range<Relation> and !ranges::range<Projection>)
+    static constexpr auto operator()(Relation&& ordering = {},
+                                     Projection&& projection = {})
+        -> _insertion_sort::adapter<Relation, Projection>
+    {
+        return {std::forward<Relation>(ordering), std::forward<Projection>(projection)};
+    }
+
+    template <class Range,
+              class Relation = unifex::tag_t<ordering::ascending>,
+              class Projection = ranges::identity>
+    requires unifex::tag_invocable<insertion_sort_fn, Range, Relation, Projection>
+    static constexpr auto operator()(Range&& range,
+                                     Relation&& relation = {},
+                                     Projection&& projection = {})
+        noexcept(unifex::is_nothrow_tag_invocable_v<insertion_sort_fn,
+                                                    decltype(range),
+                                                    Relation,
+                                                    Projection>)
+            -> unifex::tag_invoke_result_t<insertion_sort_fn, Range, Relation, Projection>
+    {
+        return tag_invoke(insertion_sort_fn{},
+                          std::forward<Range>(range),
+                          std::forward<Relation>(relation),
+                          std::forward<Projection>(projection));
+    }
+
+    template <class Itr,
+              class Sentinel,
+              class Relation = unifex::tag_t<ordering::ascending>,
+              class Projection = ranges::identity>
+    requires unifex::tag_invocable<insertion_sort_fn, Itr, Sentinel, Relation, Projection>
+    static constexpr auto operator()(
+        Itr&& first,
+        Sentinel&& last,
+        Relation&& relation = {},
+        Projection&& projection =
+            {}) noexcept(unifex::is_nothrow_tag_invocable_v<insertion_sort_fn,
+                                                            Itr,
+                                                            Sentinel,
+                                                            Relation,
+                                                            Projection>)
+        -> unifex::
+            tag_invoke_result_t<insertion_sort_fn, Itr, Sentinel, Relation, Projection>
+    {
+        return tag_invoke(insertion_sort_fn{},
+                          std::forward<Itr>(first),
+                          std::forward<Sentinel>(last),
+                          std::forward<Relation>(relation),
+                          std::forward<Projection>(projection));
+    }
+
+    template <class Range,
+              class Relation = unifex::tag_t<ordering::ascending>,
+              class Projection = ranges::identity>
+    requires(not unifex::tag_invocable<insertion_sort_fn, Range, Relation, Projection> and
+             ranges::range<Range> and ranges::sized_range<Range> and
+             ranges::forward_range<Range> and
+             ranges::indirect_strict_weak_order<
+                 Relation,
+                 ranges::projected<ranges::iterator_t<Range>, Projection>,
+                 ranges::projected<ranges::iterator_t<Range>, Projection>>)
+    static constexpr auto operator()(Range&& range,
+                                     Relation&& relation = {},
+                                     Projection&& projection = {})
+        noexcept(noexcept(
+            _insertion_sort::algorithm(begin(range), end(range), relation, projection)))
+            -> sorted<Range, Relation, Projection>
+    {
+        _insertion_sort::algorithm(
+            ranges::begin(range), ranges::end(range), relation, projection);
+        return {std::forward<Range>(range),
+                std::forward<Relation>(relation),
+                std::forward<Projection>(projection)};
+    }
+
+    template <class Itr,
+              class Sentinel,
+              class Relation = unifex::tag_t<ordering::ascending>,
+              class Projection = ranges::identity>
+    requires(not unifex::
+                 tag_invocable<insertion_sort_fn, Itr, Sentinel, Relation, Projection> and
+             ranges::forward_iterator<std::remove_cvref_t<Itr>> and
+             ranges::sentinel_for<std::remove_cvref_t<Sentinel>,
+                                  std::remove_cvref_t<Itr>> and
+             ranges::indirect_strict_weak_order<Relation,
+                                                ranges::projected<Itr, Projection>,
+                                                ranges::projected<Itr, Projection>>)
+    static constexpr auto operator()(Itr&& first,
+                                     Sentinel&& last,
+                                     Relation&& relation = {},
+                                     Projection&& projection = {})
+        noexcept(noexcept(_insertion_sort::algorithm(first, last, relation, projection)))
+            -> sorted<Itr, Sentinel, Relation, Projection>
+    {
+        _insertion_sort::algorithm(first, last, relation, projection);
+        return {std::forward<Itr>(first),
+                std::forward<Sentinel>(last),
+                std::forward<Relation>(relation),
+                std::forward<Projection>(projection)};
+    }
+} insertion_sort;
 
 namespace _insertion_sort
 {
 
-template <class Compare>
-struct _adapter<Compare>::type
+template <class Relation, class Projection>
+struct _adapter<Relation, Projection>::type
 {
-    [[no_unique_address]] Compare compare_;
+    [[no_unique_address]] Relation relation_;     // NOLINT
+    [[no_unique_address]] Projection projection_; //
 
-    template <class Adapter>
-    requires std::same_as<std::remove_cvref_t<Adapter>, type>
-    friend constexpr auto operator|(ranges::forward_range auto&& range, Adapter&& self)
+private:
+    template <class Range, class Adapter>
+    requires(std::same_as<std::remove_cvref_t<Adapter>, type>)
+    friend constexpr auto operator|(Range&& range, Adapter&& self)
+        noexcept(noexcept(insertion_sort(std::forward<Range>(range),
+                                         std::forward_like<Adapter>(self.relation_),
+                                         std::forward_like<Adapter>(self.projection_))))
+            -> decltype(insertion_sort(std::forward<Range>(range),
+                                       std::forward_like<Adapter>(self.relation_),
+                                       std::forward_like<Adapter>(self.projection_)))
     {
-        return tag_invoke(unifex::tag_t<insertion_sort>{},
-                          std::forward<decltype(range)>(range),
-                          std::forward_like<Adapter>(self.compare_));
+        return insertion_sort(std::forward<Range>(range),
+                              std::forward_like<Adapter>(self.relation_),
+                              std::forward_like<Adapter>(self.projection_));
     }
 };
 
 } // namespace _insertion_sort
-inline constexpr auto insertion_sort_descending = insertion_sort(ordering::descending{});
-inline constexpr auto insertion_sort_ascending = insertion_sort(ordering::ascending{});
+inline constexpr auto insertion_sort_descending = insertion_sort(ordering::descending);
+inline constexpr auto insertion_sort_ascending = insertion_sort(ordering::ascending);
 
 } // namespace algo

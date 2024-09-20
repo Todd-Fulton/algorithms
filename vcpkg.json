@@ -12,10 +12,7 @@
       "platform": "(linux & x64)"
     },
     {
-      "name": "libunifex",
-      "features": [
-        "coroutines"
-      ]
+      "name": "libunifex"
     }
   ],
   "features": {

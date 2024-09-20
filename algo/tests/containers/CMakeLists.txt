@@ -1,0 +1,2 @@
+algo_add_tests(dynamic_array_tests)
+algo_add_tests(vector_tests)

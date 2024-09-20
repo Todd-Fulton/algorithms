@@ -46,14 +46,14 @@ macro(algorithms_enable_hardening target global ubsan_minimal_runtime)
       endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
     else()
       # Otherwise if we are linking against libstdc++
-      if(CMAKE_BUILD_TYPE STREQUALS "Debug")
+      if(CMAKE_BUILD_TYPE STREQUAL "Debug")
         string(APPEND NEW_COMPILE_OPTIONS
                " -D_GLIBCXX_DEBUG=1 -D_GLIBCXX_CONCEPT_CHECKS=1")
         message(
           STATUS
             "*** g++/clang _GLIBCXX_DEBUG=1 -D_GLIBCXX_CONCEPT_CHECKS=1 enabled"
         )
-      endif(CMAKE_BUILD_TYPE STREQUALS "Debug")
+      endif(CMAKE_BUILD_TYPE STREQUAL "Debug")
 
       string(APPEND NEW_CXX_DEFINITIONS " -D_GLIBCXX_ASSERTIONS")
       message(STATUS "*** GLIBC++ Assertions (vector[], string[], ...) enabled")
@@ -63,8 +63,8 @@ macro(algorithms_enable_hardening target global ubsan_minimal_runtime)
 
   check_cxx_compiler_flag(-fpie PIE)
   if(PIE)
-    set(NEW_COMPILE_OPTIONS ${NEW_COMPILE_OPTIONS} -fpie)
-    set(NEW_LINK_OPTIONS ${NEW_LINK_OPTIONS} -pie)
+    string(APPEND NEW_COMPILE_OPTIONS " -fpie")
+    string(APPEND NEW_LINK_OPTIONS " -pie")
     message(STATUS "*** g++/clang PIE mode enabled")
   else()
     message(STATUS "*** g++/clang PIE mode NOT enabled (not supported)")

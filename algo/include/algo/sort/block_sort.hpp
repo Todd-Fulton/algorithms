@@ -19,6 +19,7 @@
 #include <range/v3/all.hpp>
 
 #include "ordering.hpp"
+#include "sorted.hpp"
 
 #include <algo/prelude.hpp>
 
@@ -56,173 +57,141 @@ constexpr auto shift_range(auto& range, auto diff)
 // combine a linear search with a binary search to reduce the number of
 // comparisons in situations where have some idea as to how many unique
 // values there are and where the next value might be
-template <typename RandomAccessIterator, typename T, typename Comparison>
+template <typename RandomAccessIterator, class T, class Comparison, class Projection>
 RandomAccessIterator FindFirstForward(RandomAccessIterator first,
                                       RandomAccessIterator last,
                                       const T& value,
-                                      Comparison compare,
+                                      Comparison&& relation,
+                                      Projection&& projection,
                                       auto unique)
 {
-    using difference_type =
-        std::iterator_traits<RandomAccessIterator>::difference_type;
+    using difference_type = std::iterator_traits<RandomAccessIterator>::difference_type;
 
     auto size = std::distance(first, last);
     if (size == 0) {
         return first;
     }
 
-    auto skip =
-        std::max(size / difference_type(unique), difference_type(1));
+    auto skip = std::max(size / difference_type(unique), difference_type(1));
 
     RandomAccessIterator index;
-    for (index = first + skip; compare(*(index - 1), value);
+    for (index = first + skip; relation(projection(*(index - 1)), projection(value));
          index += skip) {
         if (index >= last - skip) {
-            return std::lower_bound(index, last, value, compare);
+            return ranges::lower_bound(index, last, value, relation, projection);
         }
     }
-    return std::lower_bound(index - skip, index, value, compare);
+    return ranges::lower_bound(index - skip, index, value, relation, projection);
 }
 
-template <typename RandomAccessIterator, typename T, typename Comparison>
+template <class RandomAccessIterator, class T, class Relation, class Projection>
 RandomAccessIterator FindLastForward(RandomAccessIterator first,
                                      RandomAccessIterator last,
                                      const T& value,
-                                     Comparison compare,
+                                     Relation&& relation,
+                                     Projection&& projection,
                                      auto unique)
 {
-    using difference_type =
-        std::iterator_traits<RandomAccessIterator>::difference_type;
+    using difference_type = std::iterator_traits<RandomAccessIterator>::difference_type;
 
     auto size = std::distance(first, last);
     if (size == 0) {
         return first;
     }
 
-    auto skip =
-        std::max(size / difference_type(unique), difference_type(1));
+    auto skip = std::max(size / difference_type(unique), difference_type(1));
 
     RandomAccessIterator index;
-    for (index = first + skip; !compare(value, *(index - 1));
+    for (index = first + skip; !relation(projection(value), projection(*(index - 1)));
          index += skip) {
         if (index >= last - skip) {
-            return std::upper_bound(index, last, value, compare);
+            return ranges::upper_bound(index, last, value, relation, projection);
         }
     }
-    return std::upper_bound(index - skip, index, value, compare);
+    return ranges::upper_bound(index - skip, index, value, relation, projection);
 }
 
-template <typename RandomAccessIterator, typename T, typename Comparison>
+template <class RandomAccessIterator, class T, class Relation, class Projection>
 RandomAccessIterator FindFirstBackward(RandomAccessIterator first,
                                        RandomAccessIterator last,
                                        const T& value,
-                                       Comparison compare,
+                                       Relation relation,
+                                       Projection projection,
                                        auto unique)
 {
-    using difference_type =
-        std::iterator_traits<RandomAccessIterator>::difference_type;
+    using difference_type = std::iterator_traits<RandomAccessIterator>::difference_type;
 
     auto size = std::distance(first, last);
     if (size == 0) {
         return first;
     }
 
-    auto skip =
-        std::max(size / difference_type(unique), difference_type(1));
+    auto skip = std::max(size / difference_type(unique), difference_type(1));
 
     RandomAccessIterator index;
     for (index = last - skip;
-         index > first && !compare(*(index - 1), value);
+         index > first && !relation(projection(*(index - 1)), projection(value));
          index -= skip) {
         if (index < first + skip) {
-            return std::lower_bound(first, index, value, compare);
+            return ranges::lower_bound(first, index, value, relation, projection);
         }
     }
-    return std::lower_bound(index, index + skip, value, compare);
+    return ranges::lower_bound(index, index + skip, value, relation, projection);
 }
 
-template <typename RandomAccessIterator, typename T, typename Comparison>
+template <class RandomAccessIterator, class T, class Relation, class Projection>
 RandomAccessIterator FindLastBackward(RandomAccessIterator first,
                                       RandomAccessIterator last,
                                       const T& value,
-                                      Comparison compare,
+                                      Relation&& relation,
+                                      Projection&& projection,
                                       auto unique)
 {
-    using difference_type =
-        std::iterator_traits<RandomAccessIterator>::difference_type;
+    using difference_type = std::iterator_traits<RandomAccessIterator>::difference_type;
 
     auto size = std::distance(first, last);
     if (size == 0) {
         return first;
     }
 
-    auto skip =
-        std::max(size / difference_type(unique), difference_type(1));
+    auto skip = std::max(size / difference_type(unique), difference_type(1));
 
     RandomAccessIterator index;
     for (index = last - skip;
-         index > first && compare(value, *(index - 1));
+         index > first && relation(projection(value), projection(*(index - 1)));
          index -= skip) {
         if (index < first + skip) {
-            return std::upper_bound(first, index, value, compare);
+            return ranges::upper_bound(first, index, value, relation, projection);
         }
     }
-    return std::upper_bound(index, index + skip, value, compare);
-}
-
-template <typename BidirectionalIterator, typename Comparison>
-void InsertionSort(BidirectionalIterator first,
-                   BidirectionalIterator last,
-                   Comparison compare)
-{
-    using value_type =
-        std::iterator_traits<BidirectionalIterator>::value_type;
-
-    if (first == last) {
-        return;
-    }
-
-    for (BidirectionalIterator cur = first + 1; cur != last; ++cur) {
-        BidirectionalIterator sift = cur;
-        BidirectionalIterator sift_1 = cur - 1;
-
-        // Compare first so we can avoid 2 moves for
-        // an element already positioned correctly.
-        if (compare(*sift, *sift_1)) {
-            value_type tmp = *sift;
-            do { // NOLINT
-                *sift-- = *sift_1;
-            } while (sift != first && compare(tmp, *--sift_1));
-            *sift = tmp;
-        }
-    }
+    return ranges::upper_bound(index, index + skip, value, relation, projection);
 }
 
 // merge operation using an external buffer
-template <typename RandomAccessIterator1,
-          typename RandomAccessIterator2,
-          typename Comparison>
+template <class RandomAccessIterator1,
+          class RandomAccessIterator2,
+          class Relation,
+          class Projection>
 void MergeExternal(RandomAccessIterator1 first1,
                    RandomAccessIterator1 last1,
                    RandomAccessIterator1 first2,
                    RandomAccessIterator1 last2,
                    RandomAccessIterator2 cache,
-                   Comparison compare)
+                   Relation&& relation,
+                   Projection&& projection)
 {
-    using difference_type =
-        std::iterator_traits<RandomAccessIterator1>::difference_type;
+    using difference_type = std::iterator_traits<RandomAccessIterator1>::difference_type;
 
     // A fits into the cache, so use that instead of the internal buffer
     RandomAccessIterator2 A_index = cache;
-    RandomAccessIterator2 A_last =
-        cache + difference_type(std::distance(first1, last1));
+    RandomAccessIterator2 A_last = cache + difference_type(std::distance(first1, last1));
     RandomAccessIterator1 B_index = first2;
     RandomAccessIterator1 B_last = last2;
     RandomAccessIterator1 insert_index = first1;
 
     if (last2 - first2 > 0 && last1 - first1 > 0) {
         while (true) {
-            if (!compare(*B_index, *A_index)) {
+            if (!relation(projection(*B_index), projection(*A_index))) {
                 *insert_index = *A_index;
                 ++A_index;
                 ++insert_index;
@@ -246,32 +215,31 @@ void MergeExternal(RandomAccessIterator1 first1,
 }
 
 // merge operation using an internal buffer
-template <typename RandomAccessIterator, typename Comparison>
+template <class RandomAccessIterator, class Relation, class Projection>
 void MergeInternal(RandomAccessIterator first1,
                    RandomAccessIterator last1,
                    RandomAccessIterator first2,
                    RandomAccessIterator last2,
                    RandomAccessIterator buffer,
-                   Comparison compare)
+                   Relation&& relation,
+                   Projection&& projection)
 {
     // whenever we find a value to add to the final array, swap it with the
     // value that's already in that spot when this algorithm is finished,
     // 'buffer' will contain its original contents, but in a different
     // order
-    using difference_type =
-        std::iterator_traits<RandomAccessIterator>::difference_type;
+    using difference_type = std::iterator_traits<RandomAccessIterator>::difference_type;
 
     RandomAccessIterator A_index = buffer;
     RandomAccessIterator B_index = first2;
-    RandomAccessIterator A_last =
-        buffer + difference_type(std::distance(first1, last1));
+    RandomAccessIterator A_last = buffer + difference_type(std::distance(first1, last1));
     RandomAccessIterator B_last = last2;
     RandomAccessIterator insert_index = first1;
 
     if (last2 - first2 > 0 && last1 - first1 > 0) {
         while (true) {
-            if (!compare(*B_index, *A_index)) {
-                std::iter_swap(insert_index, A_index);
+            if (!relation(projection(*B_index), projection(*A_index))) {
+                ranges::iter_swap(insert_index, A_index);
                 ++A_index;
                 ++insert_index;
                 if (A_index == A_last) {
@@ -279,7 +247,7 @@ void MergeInternal(RandomAccessIterator first1,
                 }
             }
             else {
-                std::iter_swap(insert_index, B_index);
+                ranges::iter_swap(insert_index, B_index);
                 ++B_index;
                 ++insert_index;
                 if (B_index == B_last) {
@@ -294,12 +262,13 @@ void MergeInternal(RandomAccessIterator first1,
 }
 
 // merge operation without a buffer
-template <typename RandomAccessIterator, typename Comparison>
+template <class RandomAccessIterator, class Relation, class Projection>
 void MergeInPlace(RandomAccessIterator first1,
                   RandomAccessIterator last1,
                   RandomAccessIterator first2,
                   RandomAccessIterator last2,
-                  Comparison compare)
+                  Relation&& relation,
+                  Projection&& projection)
 {
     if (last1 - first1 == 0 || last2 - first2 == 0) {
         return;
@@ -329,14 +298,13 @@ void MergeInPlace(RandomAccessIterator first1,
      places
      */
 
-    using difference_type =
-        std::iterator_traits<RandomAccessIterator>::difference_type;
+    using difference_type = std::iterator_traits<RandomAccessIterator>::difference_type;
 
     while (true) {
         // find the first place in B where the first item in A needs to be
         // inserted
         RandomAccessIterator mid =
-            std::lower_bound(first2, last2, *first1, compare);
+            ranges::lower_bound(first2, last2, *first1, relation, projection);
 
         // rotate A into place
         difference_type amount = mid - last1;
@@ -349,7 +317,7 @@ void MergeInPlace(RandomAccessIterator first1,
         first2 = mid;
         first1 += amount;
         last1 = first2;
-        first1 = std::upper_bound(first1, last1, *first1, compare);
+        first1 = ranges::upper_bound(first1, last1, *first1, relation, projection);
         if (std::distance(first1, last1) == 0) {
             break;
         }
@@ -360,10 +328,10 @@ void MergeInPlace(RandomAccessIterator first1,
 // the bottom-up merge sort only operates on values that are powers of two,
 // so scale down to that power of two, then use a fraction to scale back
 // again
-template <class RangeType>
+template <class Itr>
 class Iterator
 {
-    using difference_type = ranges::range_difference_t<RangeType>;
+    using difference_type = ranges::iter_difference_t<Itr>;
 
     difference_type size, power_of_two;
     difference_type decimal{}, numerator{}, denominator;
@@ -385,8 +353,7 @@ public:
     }
 
     template <ranges::random_access_range RANGE>
-    auto nextRange(RANGE& range)
-        -> ranges::subrange<ranges::iterator_t<RANGE>>
+    auto nextRange(RANGE& range) -> ranges::subrange<ranges::iterator_t<RANGE>>
     {
         auto start = decimal;
 
@@ -427,8 +394,7 @@ public:
 template <class RandomAccessIterator>
 struct InternalBuffers
 {
-    using difference_type =
-        std::iterator_traits<RandomAccessIterator>::difference_type;
+    using difference_type = std::iterator_traits<RandomAccessIterator>::difference_type;
 
     // as an optimization, we really only need to pull out the
     // internal buffers once for each level of merges after that we
@@ -449,8 +415,7 @@ struct InternalBuffers
         difference_type count{};
         ranges::subrange<RandomAccessIterator> range;
 
-        constexpr explicit PullItr(
-            ranges::random_access_range auto&& range)
+        constexpr explicit PullItr(ranges::random_access_range auto&& range)
             : range{range}
         {
         }
@@ -458,11 +423,11 @@ struct InternalBuffers
     std::array<PullItr, 2> pull_itrs{};
     bool find_separately = false;
 
-    constexpr explicit InternalBuffers(
-        auto&& iterator,
-        ranges::random_access_range auto&& range,
-        auto&& cache,
-        auto&& compare)
+    constexpr explicit InternalBuffers(Iterator<RandomAccessIterator>& iterator,
+                                       ranges::random_access_range auto&& range,
+                                       auto&& cache,
+                                       auto&& relation,
+                                       auto&& projection)
         : block_size{difference_type(std::sqrt(iterator.length()))}
         , buffer_size{difference_type(iterator.length()) / block_size + 1}
         , find{buffer_size + buffer_size}
@@ -486,10 +451,10 @@ struct InternalBuffers
             find_separately = true;
         }
 
-        initialize(iterator, range, cache, compare);
+        initialize(iterator, range, cache, relation, projection);
     }
 
-    constexpr void clean_up(auto&& compare)
+    constexpr void clean_up(auto&& relation, auto&& projection)
     {
         // when we're finished with this merge step we should have the
         // one or two internal buffers left over, where the second
@@ -502,59 +467,50 @@ struct InternalBuffers
         // simple insertion sort, even for tens of millions of items.
         // this may be because insertion sort is quite fast when the
         // data is already somewhat sorted, like it is here
-        InsertionSort(
-            ranges::begin(buffer2), ranges::end(buffer2), compare);
+        insertion_sort(
+            ranges::begin(buffer2), ranges::end(buffer2), relation, projection);
 
         for (pull_index = 0; pull_index < 2; ++pull_index) {
             auto unique = pull_itrs[pull_index].count * 2;
             if (pull_itrs[pull_index].from > pull_itrs[pull_index].to) {
                 // the values were pulled out to the left, so
                 // redistribute them back to the right
-                ranges::subrange buffer(
-                    ranges::begin(pull_itrs[pull_index].range),
-                    ranges::begin(pull_itrs[pull_index].range) +
-                        pull_itrs[pull_index].count);
+                ranges::subrange buffer(ranges::begin(pull_itrs[pull_index].range),
+                                        ranges::begin(pull_itrs[pull_index].range) +
+                                            pull_itrs[pull_index].count);
                 while (ranges::size(buffer) > 0) {
-                    buffer_index = FindFirstForward(
-                        ranges::end(buffer),
-                        ranges::end(pull_itrs[pull_index].range),
-                        *ranges::begin(buffer),
-                        compare,
-                        unique);
-                    difference_type amount =
-                        buffer_index - ranges::end(buffer);
-                    std::rotate(ranges::begin(buffer),
-                                ranges::end(buffer),
-                                buffer_index);
-                    buffer = ranges::subrange(
-                        ranges::begin(buffer) + (amount + 1),
-                        ranges::end(buffer) + amount);
+                    buffer_index =
+                        FindFirstForward(ranges::end(buffer),
+                                         ranges::end(pull_itrs[pull_index].range),
+                                         *ranges::begin(buffer),
+                                         relation,
+                                         projection,
+                                         unique);
+                    difference_type amount = buffer_index - ranges::end(buffer);
+                    std::rotate(ranges::begin(buffer), ranges::end(buffer), buffer_index);
+                    buffer = ranges::subrange(ranges::begin(buffer) + (amount + 1),
+                                              ranges::end(buffer) + amount);
                     unique -= 2;
                 }
             }
-            else if (pull_itrs[pull_index].from <
-                     pull_itrs[pull_index].to) {
+            else if (pull_itrs[pull_index].from < pull_itrs[pull_index].to) {
                 // the values were pulled out to the right, so
                 // redistribute them back to the left
-                ranges::subrange buffer(
-                    ranges::end(pull_itrs[pull_index].range) -
-                        pull_itrs[pull_index].count,
-                    ranges::end(pull_itrs[pull_index].range));
+                ranges::subrange buffer(ranges::end(pull_itrs[pull_index].range) -
+                                            pull_itrs[pull_index].count,
+                                        ranges::end(pull_itrs[pull_index].range));
                 while (ranges::size(buffer) > 0) {
-                    buffer_index = FindLastBackward(
-                        ranges::begin(pull_itrs[pull_index].range),
-                        ranges::begin(buffer),
-                        *(ranges::end(buffer) - 1),
-                        compare,
-                        unique);
-                    difference_type amount =
-                        ranges::begin(buffer) - buffer_index;
-                    std::rotate(buffer_index,
-                                buffer_index + amount,
-                                ranges::end(buffer));
-                    buffer = ranges::subrange(
-                        ranges::begin(buffer) - amount,
-                        ranges::end(buffer) - (amount + 1));
+                    buffer_index =
+                        FindLastBackward(ranges::begin(pull_itrs[pull_index].range),
+                                         ranges::begin(buffer),
+                                         *(ranges::end(buffer) - 1),
+                                         relation,
+                                         projection,
+                                         unique);
+                    difference_type amount = ranges::begin(buffer) - buffer_index;
+                    std::rotate(buffer_index, buffer_index + amount, ranges::end(buffer));
+                    buffer = ranges::subrange(ranges::begin(buffer) - amount,
+                                              ranges::end(buffer) - (amount + 1));
                     unique -= 2;
                 }
             }
@@ -566,28 +522,28 @@ struct InternalBuffers
     // are, to create the two internal buffers
     constexpr auto pull(auto&& destination, auto&& start, auto&& end)
     {
-        pull_itrs[pull_index].range =
-            ranges::subrange(std::forward<decltype(start)>(start),
-                             std::forward<decltype(end)>(end));
+        pull_itrs[pull_index].range = ranges::subrange(
+            std::forward<decltype(start)>(start), std::forward<decltype(end)>(end));
         pull_itrs[pull_index].count = count;
         pull_itrs[pull_index].from = buffer_index;
-        pull_itrs[pull_index].to =
-            std::forward<decltype(destination)>(destination);
+        pull_itrs[pull_index].to = std::forward<decltype(destination)>(destination);
     }
 
     constexpr auto unique(auto&& subrangeA,
                           auto&& subrangeB,
                           std::size_t cache_size,
-                          auto const& compare)
+                          auto const& relation,
+                          auto&& projection)
     {
-        return unique_a(subrangeA, subrangeB, cache_size, compare) ||
-               unique_b(subrangeA, subrangeB, cache_size, compare);
+        return unique_a(subrangeA, subrangeB, cache_size, relation, projection) ||
+               unique_b(subrangeA, subrangeB, cache_size, relation, projection);
     }
 
     constexpr auto unique_a(auto&& subrangeA,
                             auto&& subrangeB,
                             std::size_t cache_size,
-                            auto const& compare)
+                            auto const& compare,
+                            auto&& projection)
     {
         // check A for the number of unique values we need to fill
         // an internal buffer these values will be pulled out to
@@ -598,6 +554,7 @@ struct InternalBuffers
                                            ranges::end(subrangeA),
                                            *last,
                                            compare,
+                                           projection,
                                            find - count);
             if (buffer_index == ranges::end(subrangeA)) {
                 break;
@@ -620,13 +577,11 @@ struct InternalBuffers
                 // containing 2√A unique values, so this section
                 // can be used to contain both of the internal
                 // buffers we'll need
-                buffer1 =
-                    ranges::subrange(ranges::begin(subrangeA),
-                                     ranges::begin(subrangeA) +
-                                         difference_type(buffer_size));
+                buffer1 = ranges::subrange(ranges::begin(subrangeA),
+                                           ranges::begin(subrangeA) +
+                                               difference_type(buffer_size));
                 buffer2 = ranges::subrange(
-                    ranges::begin(subrangeA) +
-                        difference_type(buffer_size),
+                    ranges::begin(subrangeA) + difference_type(buffer_size),
                     ranges::begin(subrangeA) + difference_type(count));
                 return true;
             }
@@ -635,42 +590,40 @@ struct InternalBuffers
                 // unique values, but did not contain the full 2√A
                 // unique values, so we still need to find a second
                 // separate buffer of at least √A unique values
-                buffer1 = ranges::subrange(ranges::begin(subrangeA),
-                                           ranges::begin(subrangeA) +
-                                               difference_type(count));
+                buffer1 =
+                    ranges::subrange(ranges::begin(subrangeA),
+                                     ranges::begin(subrangeA) + difference_type(count));
                 find = buffer_size;
             }
             else if (block_size <= difference_type(cache_size)) {
                 // we found the first and only internal buffer that
                 // we need, so we're done!
-                buffer1 = ranges::subrange(ranges::begin(subrangeA),
-                                           ranges::begin(subrangeA) +
-                                               difference_type(count));
+                buffer1 =
+                    ranges::subrange(ranges::begin(subrangeA),
+                                     ranges::begin(subrangeA) + difference_type(count));
                 return true;
             }
             else if (find_separately) {
                 // found one buffer, but now find the other one
-                buffer1 = ranges::subrange(ranges::begin(subrangeA),
-                                           ranges::begin(subrangeA) +
-                                               difference_type(count));
+                buffer1 =
+                    ranges::subrange(ranges::begin(subrangeA),
+                                     ranges::begin(subrangeA) + difference_type(count));
                 find_separately = false;
             }
             else {
                 // we found a second buffer in an 'A' subarray
                 // containing √A unique values, so we're done!
-                buffer2 = ranges::subrange(ranges::begin(subrangeA),
-                                           ranges::begin(subrangeA) +
-                                               difference_type(count));
+                buffer2 =
+                    ranges::subrange(ranges::begin(subrangeA),
+                                     ranges::begin(subrangeA) + difference_type(count));
                 return true;
             }
         }
-        else if (pull_index == 0 &&
-                 count > difference_type(ranges::size(buffer1))) {
+        else if (pull_index == 0 && count > difference_type(ranges::size(buffer1))) {
             // keep track of the largest buffer we were able to
             // find
             buffer1 = ranges::subrange(ranges::begin(subrangeA),
-                                       ranges::begin(subrangeA) +
-                                           difference_type(count));
+                                       ranges::begin(subrangeA) + difference_type(count));
             pull(ranges::begin(subrangeA),
                  ranges::begin(subrangeA),
                  ranges::end(subrangeB));
@@ -682,7 +635,8 @@ struct InternalBuffers
     constexpr auto unique_b(auto&& subrangeA,
                             auto&& subrangeB,
                             std::size_t cache_size,
-                            auto const& compare)
+                            auto&& relation,
+                            auto&& projection)
     {
         // check B for the number of unique values we need to fill
         // an internal buffer these values will be pulled out to
@@ -692,7 +646,8 @@ struct InternalBuffers
             buffer_index = FindFirstBackward(ranges::begin(subrangeB),
                                              last,
                                              *last,
-                                             compare,
+                                             relation,
+                                             projection,
                                              find - count);
             if (buffer_index == ranges::begin(subrangeB)) {
                 break;
@@ -705,9 +660,8 @@ struct InternalBuffers
             // keep track of the range within the array where we'll
             // need to "pull out" these values to create the
             // internal buffer
-            pull(ranges::end(subrangeB),
-                 ranges::begin(subrangeA),
-                 ranges::end(subrangeB));
+            pull(
+                ranges::end(subrangeB), ranges::begin(subrangeA), ranges::end(subrangeB));
             pull_index = 1;
 
             if (count == buffer_size + buffer_size) {
@@ -718,9 +672,9 @@ struct InternalBuffers
                 buffer1 = ranges::subrange(
                     ranges::end(subrangeB) - difference_type(count),
                     ranges::end(subrangeB) - difference_type(buffer_size));
-                buffer2 = ranges::subrange(
-                    ranges::end(subrangeB) - difference_type(buffer_size),
-                    ranges::end(subrangeB));
+                buffer2 = ranges::subrange(ranges::end(subrangeB) -
+                                               difference_type(buffer_size),
+                                           ranges::end(subrangeB));
                 return true;
             }
             else if (find == buffer_size + buffer_size) {
@@ -728,24 +682,24 @@ struct InternalBuffers
                 // unique values, but did not contain the full 2√A
                 // unique values, so we still need to find a second
                 // separate buffer of at least √A unique values
-                buffer1 = ranges::subrange(ranges::end(subrangeB) -
-                                               difference_type(count),
-                                           ranges::end(subrangeB));
+                buffer1 =
+                    ranges::subrange(ranges::end(subrangeB) - difference_type(count),
+                                     ranges::end(subrangeB));
                 find = buffer_size;
             }
             else if (block_size <= difference_type(cache_size)) {
                 // we found the first and only internal buffer that
                 // we need, so we're done!
-                buffer1 = ranges::subrange(ranges::end(subrangeB) -
-                                               difference_type(count),
-                                           ranges::end(subrangeB));
+                buffer1 =
+                    ranges::subrange(ranges::end(subrangeB) - difference_type(count),
+                                     ranges::end(subrangeB));
                 return true;
             }
             else if (find_separately) {
                 // found one buffer, but now find the other one
-                buffer1 = ranges::subrange(ranges::end(subrangeB) -
-                                               difference_type(count),
-                                           ranges::end(subrangeB));
+                buffer1 =
+                    ranges::subrange(ranges::end(subrangeB) - difference_type(count),
+                                     ranges::end(subrangeB));
                 find_separately = false;
             }
             else {
@@ -755,31 +709,26 @@ struct InternalBuffers
                 // the end point for that A subarray so it knows to
                 // stop redistributing its values before reaching
                 // buffer2
-                if (ranges::begin(pull_itrs[0].range) ==
-                    ranges::begin(subrangeA)) {
-                    pull_itrs[0].range =
-                        adjust_end(pull_itrs[0].range,
-                                   -difference_type(pull_itrs[1].count));
+                if (ranges::begin(pull_itrs[0].range) == ranges::begin(subrangeA)) {
+                    pull_itrs[0].range = adjust_end(pull_itrs[0].range,
+                                                    -difference_type(pull_itrs[1].count));
                 }
 
                 // we found a second buffer in a 'B' subarray
                 // containing √A unique values, so we're done!
-                buffer2 = ranges::subrange(ranges::end(subrangeB) -
-                                               difference_type(count),
-                                           ranges::end(subrangeB));
+                buffer2 =
+                    ranges::subrange(ranges::end(subrangeB) - difference_type(count),
+                                     ranges::end(subrangeB));
                 return true;
             }
         }
-        else if (pull_index == 0 &&
-                 count > difference_type(ranges::size(buffer1))) {
+        else if (pull_index == 0 && count > difference_type(ranges::size(buffer1))) {
             // keep track of the largest buffer we were able to
             // find
-            buffer1 = ranges::subrange(ranges::end(subrangeB) -
-                                           difference_type(count),
+            buffer1 = ranges::subrange(ranges::end(subrangeB) - difference_type(count),
                                        ranges::end(subrangeB));
-            pull(ranges::end(subrangeB),
-                 ranges::begin(subrangeA),
-                 ranges::end(subrangeB));
+            pull(
+                ranges::end(subrangeB), ranges::begin(subrangeA), ranges::end(subrangeB));
         }
 
         return false;
@@ -794,18 +743,15 @@ struct InternalBuffers
     // in the case where it couldn't find a single buffer of at
     // least √A unique values, all of the Merge steps must be
     // replaced by a different merge algorithm (MergeInPlace)
-    constexpr auto initialize(auto&& iterator,
-                              auto&& range,
-                              auto&& cache,
-                              auto const& compare)
+    constexpr auto initialize(
+        auto&& iterator, auto&& range, auto&& cache, auto&& relation, auto&& projection)
     {
         iterator.begin();
         while (!iterator.finished()) {
             auto subrangeA = iterator.nextRange(range);
             auto subrangeB = iterator.nextRange(range);
 
-            if (unique(
-                    subrangeA, subrangeB, ranges::size(cache), compare)) {
+            if (unique(subrangeA, subrangeB, ranges::size(cache), relation, projection)) {
                 break;
             }
         }
@@ -820,38 +766,32 @@ struct InternalBuffers
                 // means the start of an A subarray
                 buffer_index = pull_itrs[pull_index].from;
                 for (count = 1; count < length; ++count) {
-                    buffer_index =
-                        FindFirstBackward(pull_itrs[pull_index].to,
-                                          pull_itrs[pull_index].from -
-                                              (difference_type(count) - 1),
-                                          *(buffer_index - 1),
-                                          compare,
-                                          length - count);
-                    auto left = ranges::subrange(
-                        buffer_index + 1, pull_itrs[pull_index].from + 1);
-                    ranges::rotate(
-                        left, ranges::end(left) - difference_type(count));
-                    pull_itrs[pull_index].from =
-                        buffer_index + difference_type(count);
+                    buffer_index = FindFirstBackward(pull_itrs[pull_index].to,
+                                                     pull_itrs[pull_index].from -
+                                                         (difference_type(count) - 1),
+                                                     *(buffer_index - 1),
+                                                     relation,
+                                                     projection,
+                                                     length - count);
+                    auto left = ranges::subrange(buffer_index + 1,
+                                                 pull_itrs[pull_index].from + 1);
+                    ranges::rotate(left, ranges::end(left) - difference_type(count));
+                    pull_itrs[pull_index].from = buffer_index + difference_type(count);
                 }
             }
-            else if (pull_itrs[pull_index].to >
-                     pull_itrs[pull_index].from) {
+            else if (pull_itrs[pull_index].to > pull_itrs[pull_index].from) {
                 // we're pulling values out to the right, which means
                 // the end of a B subarray
                 buffer_index = pull_itrs[pull_index].from + 1;
                 for (count = 1; count < length; ++count) {
-                    buffer_index =
-                        FindLastForward(buffer_index,
-                                        pull_itrs[pull_index].to,
-                                        *buffer_index,
-                                        compare,
-                                        length - count);
-                    ranges::subrange right(pull_itrs[pull_index].from,
-                                           buffer_index - 1);
-                    ranges::rotate(right,
-                                   ranges::begin(right) +
-                                       difference_type(count));
+                    buffer_index = FindLastForward(buffer_index,
+                                                   pull_itrs[pull_index].to,
+                                                   *buffer_index,
+                                                   relation,
+                                                   projection,
+                                                   length - count);
+                    ranges::subrange right(pull_itrs[pull_index].from, buffer_index - 1);
+                    ranges::rotate(right, ranges::begin(right) + difference_type(count));
                     pull_itrs[pull_index].from =
                         buffer_index - difference_type(count) - 1;
                 }
@@ -889,8 +829,7 @@ struct InternalBuffers
                 }
             }
             else if (pull_itrs[0].from < pull_itrs[0].to) {
-                subrangeB = adjust_end(
-                    subrangeB, -difference_type(pull_itrs[0].count));
+                subrangeB = adjust_end(subrangeB, -difference_type(pull_itrs[0].count));
                 if (difference_type(ranges::size(subrangeB)) == 0) {
                     return true;
                 }
@@ -904,8 +843,7 @@ struct InternalBuffers
                 }
             }
             else if (pull_itrs[1].from < pull_itrs[1].to) {
-                subrangeB = adjust_end(
-                    subrangeB, -difference_type(pull_itrs[1].count));
+                subrangeB = adjust_end(subrangeB, -difference_type(pull_itrs[1].count));
                 if (difference_type(ranges::size(subrangeB)) == 0) {
                     return true;
                 }
@@ -921,10 +859,10 @@ InternalBuffers(auto&&, RandomAccessRange&, auto&&, auto&&)
     -> InternalBuffers<ranges::iterator_t<RandomAccessRange>>;
 
 template <class T>
-constexpr auto make_cache(std::size_t range_size,
+constexpr auto make_cache(auto range_size,
                           std::optional<size_t> const& cache_size_opt = {})
 {
-    auto cache_size = cache_size_opt.value_or((range_size + 1) / 2);
+    auto cache_size = cache_size_opt.value_or(size_t((range_size + 1) / 2));
     std::vector<T> cache;
     // good choices for the cache size are:
     // (size + 1)/2 – turns into a full-speed standard merge sort since
@@ -957,35 +895,43 @@ constexpr auto make_cache(std::size_t range_size,
     return cache;
 }
 
-template <class RNG, class CMP = std::less<>>
-constexpr auto sort_four(RNG& rng, CMP const& compare = {})
+template <class Itr, class Sentinel, class Relation, class Projection>
+constexpr auto sort_four(Itr&& first,
+                         Sentinel&& last,
+                         Relation&& relation,
+                         Projection&& projection)
 {
-    using difference_type = ranges::range_difference_t<RNG>;
-    using std::swap;
-    if (difference_type(ranges::size(rng)) == 3) {
+    using difference_type = ranges::iter_difference_t<Itr>;
+    if (difference_type(ranges::distance(first, last)) == 3) {
         // hard-coded insertion sort
-        if (compare(rng[1], rng[0])) {
-            swap(rng[0], rng[1]);
+        if (relation(projection(*(first + 1)), projection(*first))) {
+            ranges::iter_swap(first, first + 1);
         }
-        if (compare(rng[2], rng[1])) {
-            swap(rng[2], rng[1]);
-            if (compare(rng[1], rng[0])) {
-                swap(rng[0], rng[1]);
+        if (relation(projection(*(first + 2)), projection(*(first + 1)))) {
+            ranges::iter_swap(first + 2, first + 1);
+            if (relation(projection(*(first + 1)), projection(*first))) {
+                ranges::iter_swap(first, first + 1);
             }
         }
     }
-    else if (difference_type(ranges::size(rng)) == 2) {
+    else if (difference_type(ranges::distance(first, last)) == 2) {
         // swap the items if they're out of order
-        if (compare(rng[1], rng[0])) {
-            swap(rng[0], rng[1]);
+        if (relation(projection(*(first + 1)), projection(*first))) {
+            ranges::iter_swap(first, first + 1);
         }
     }
 }
 
-constexpr auto initial_sort(auto& rng, auto& iterator, auto const& compare)
+constexpr auto initial_sort(auto const& first,
+                            auto const& last,
+                            auto& iterator,
+                            auto&& relation,
+                            auto&& projection)
 {
     using difference_type =
-        ranges::range_difference_t<std::remove_cvref_t<decltype(rng)>>;
+        ranges::iter_difference_t<std::remove_cvref_t<decltype(first)>>;
+
+    auto rng = ranges::subrange(first, last);
 
     while (!iterator.finished()) {
         std::array<size_t, 8> order = {0, 1, 2, 3, 4, 5, 6, 7};
@@ -995,13 +941,12 @@ constexpr auto initial_sort(auto& rng, auto& iterator, auto const& compare)
         auto do_swap = [&](size_t x, size_t y) {
             using std::swap;
             ASSUME(x < 8 && y < 8 && x >= 0 && y >= 0);
-            if (compare(next_range[difference_type(y)],
-                        next_range[difference_type(x)]) ||
+            if (relation(projection(next_range[difference_type(y)]),
+                         projection(next_range[difference_type(x)])) ||
                 (order.at(x) > order.at(y) &&
-                 !compare(next_range[difference_type(x)],
-                          next_range[difference_type(y)]))) {
-                swap(next_range[difference_type(x)],
-                     next_range[difference_type(y)]);
+                 !relation(projection(next_range[difference_type(x)]),
+                           projection(next_range[difference_type(y)])))) {
+                swap(next_range[difference_type(x)], next_range[difference_type(y)]);
                 swap(order.at(x), order.at(y));
             }
         };
@@ -1081,22 +1026,19 @@ constexpr auto initial_sort(auto& rng, auto& iterator, auto const& compare)
 }
 
 // merge 2 chunks at a time using an in memory cache
-constexpr auto merge_two_chunks(auto&& subrangeA,
-                                auto&& subrangeB,
-                                auto&& cache,
-                                auto&& compare)
+constexpr auto merge_two_chunks(
+    auto&& subrangeA, auto&& subrangeB, auto&& cache, auto&& relation, auto&& projection)
 {
 
-    if (compare(*(ranges::end(subrangeB) - 1),
-                *ranges::begin(subrangeA))) {
+    if (relation(projection(*(ranges::end(subrangeB) - 1)),
+                 projection(*ranges::begin(subrangeA)))) {
         // the two ranges are in reverse order, so a simple
         // rotation should fix it
-        std::rotate(ranges::begin(subrangeA),
-                    ranges::end(subrangeA),
-                    ranges::end(subrangeB));
+        std::rotate(
+            ranges::begin(subrangeA), ranges::end(subrangeA), ranges::end(subrangeB));
     }
-    else if (compare(*ranges::begin(subrangeB),
-                     *(ranges::end(subrangeA) - 1))) {
+    else if (relation(projection(*ranges::begin(subrangeB)),
+                      projection(*(ranges::end(subrangeA) - 1)))) {
         // these two ranges weren't already in order, so
         // we'll need to merge them!
         ranges::copy(subrangeA, ranges::begin(cache));
@@ -1105,40 +1047,40 @@ constexpr auto merge_two_chunks(auto&& subrangeA,
                       ranges::begin(subrangeB),
                       ranges::end(subrangeB),
                       ranges::begin(cache),
-                      compare);
+                      relation,
+                      projection);
     }
 }
 
 constexpr auto merge_two_chunks_cache(auto&& subrangeA,
                                       auto&& subrangeB,
                                       auto&& cache_itr,
-                                      auto&& compare)
+                                      auto&& relation,
+                                      auto&& projection)
 {
 
-    using difference_type = ranges::range_difference_t<
-        std::remove_cvref_t<decltype(subrangeA)>>;
+    using difference_type =
+        ranges::range_difference_t<std::remove_cvref_t<decltype(subrangeA)>>;
 
     // merge A1 and B1 into the cache
-    if (compare(*(ranges::end(subrangeB) - 1),
-                *ranges::begin(subrangeA))) {
+    if (relation(projection(*(ranges::end(subrangeB) - 1)),
+                 projection(*ranges::begin(subrangeA)))) {
         // the two ranges are in reverse order, so copy
         // them in reverse order into the cache
         ranges::copy(subrangeB, cache_itr);
-        ranges::copy(subrangeA,
-                     cache_itr + difference_type(ranges::size(subrangeB)));
+        ranges::copy(subrangeA, cache_itr + difference_type(ranges::size(subrangeB)));
     }
-    else if (compare(*ranges::begin(subrangeB),
-                     *(ranges::end(subrangeA) - 1))) {
+    else if (relation(projection(*ranges::begin(subrangeB)),
+                      projection(*(ranges::end(subrangeA) - 1)))) {
         // these two ranges weren't already in order, so
         // merge them into the cache
-        ranges::merge(subrangeA, subrangeB, cache_itr, compare);
+        ranges::merge(subrangeA, subrangeB, cache_itr, relation, projection, projection);
     }
     else {
 
         // copy A1 and B1 into the cache in the same order
         // at once
-        ranges::copy(
-            ranges::begin(subrangeA), ranges::end(subrangeB), cache_itr);
+        ranges::copy(ranges::begin(subrangeA), ranges::end(subrangeB), cache_itr);
     }
 }
 
@@ -1148,54 +1090,54 @@ constexpr auto merge_four_chunks(auto&& subrangeA1,
                                  auto&& subrangeA2,
                                  auto&& subrangeB2,
                                  auto&& cache,
-                                 auto&& compare)
+                                 auto&& relation,
+                                 auto&& projection)
 {
     // if A1, B1, A2, and B2 are all in order, skip
     // doing anything else
-    if (!compare(*ranges::begin(subrangeB2),
-                 *(ranges::end(subrangeA2) - 1)) &&
-        !compare(*ranges::begin(subrangeA2),
-                 *(ranges::end(subrangeB1) - 1))) {
+    if (!relation(projection(*ranges::begin(subrangeB2)),
+                  projection(*(ranges::end(subrangeA2) - 1))) &&
+        !relation(projection(*ranges::begin(subrangeA2)),
+                  projection(*(ranges::end(subrangeB1) - 1)))) {
         return;
     }
 
     // Next level
-    auto level2_a_size = ranges::distance(ranges::begin(subrangeA1),
-                                          ranges::end(subrangeB1));
-    auto level2_b_size = ranges::distance(ranges::begin(subrangeA2),
-                                          ranges::end(subrangeB2));
+    auto level2_a_size =
+        ranges::distance(ranges::begin(subrangeA1), ranges::end(subrangeB1));
+    auto level2_b_size =
+        ranges::distance(ranges::begin(subrangeA2), ranges::end(subrangeB2));
     auto l2_cache = ranges::begin(subrangeA1);
 
     // merge A1 and B1 into the cache
     merge_two_chunks_cache(std::forward<decltype(subrangeA1)>(subrangeA1),
                            std::forward<decltype(subrangeB1)>(subrangeB1),
                            ranges::begin(cache),
-                           compare);
+                           relation,
+                           projection);
 
     // merge A2 and B2 into the cache
     merge_two_chunks_cache(std::forward<decltype(subrangeA2)>(subrangeA2),
                            std::forward<decltype(subrangeB2)>(subrangeB2),
                            ranges::begin(cache) + level2_a_size,
-                           compare);
+                           relation,
+                           projection);
 
     // merge A1 and A2 from the cache into the array
     // A3 and B3 are in cache taken to A1 and A2 in the array
     // This is the next level of chunks merged ahead of time
     merge_two_chunks_cache(
-        ranges::subrange(ranges::begin(cache),
-                         ranges::begin(cache) + level2_a_size),
+        ranges::subrange(ranges::begin(cache), ranges::begin(cache) + level2_a_size),
         ranges::subrange(ranges::begin(cache) + level2_a_size,
-                         ranges::begin(cache) + level2_a_size +
-                             level2_b_size),
+                         ranges::begin(cache) + level2_a_size + level2_b_size),
         l2_cache,
-        compare);
+        relation,
+        projection);
 }
 
 // sort using cache
-constexpr auto block_sort_cache(auto&& iterator,
-                                auto&& cache,
-                                auto&& range,
-                                auto&& compare)
+constexpr auto block_sort_cache(
+    auto&& iterator, auto&& cache, auto&& range, auto&& relation, auto&& projection)
 {
     using RangeType = std::remove_cvref_t<decltype(range)>;
     using difference_type = ranges::range_difference_t<RangeType>;
@@ -1203,8 +1145,7 @@ constexpr auto block_sort_cache(auto&& iterator,
     // if four subarrays fit into the cache, it's faster to merge
     // both pairs of subarrays into the cache, then merge the two
     // merged subarrays from the cache back into the original array
-    if ((iterator.length() + 1) * 4 <=
-            difference_type(ranges::size(cache)) &&
+    if ((iterator.length() + 1) * 4 <= difference_type(ranges::size(cache)) &&
         iterator.length() * 4 <= difference_type(ranges::size(range))) {
         iterator.begin();
         while (!iterator.finished()) {
@@ -1213,7 +1154,8 @@ constexpr auto block_sort_cache(auto&& iterator,
                               iterator.nextRange(range),
                               iterator.nextRange(range),
                               cache,
-                              compare);
+                              relation,
+                              projection);
         }
 
         // we merged two levels at the same time, so we're done
@@ -1227,7 +1169,8 @@ constexpr auto block_sort_cache(auto&& iterator,
             merge_two_chunks(iterator.nextRange(range),
                              iterator.nextRange(range),
                              cache,
-                             compare);
+                             relation,
+                             projection);
         }
     }
 }
@@ -1238,11 +1181,12 @@ constexpr auto Merge(auto&& a1,
                      auto&& b2,
                      auto&& buffer,
                      auto&& cache,
-                     auto&& compare)
+                     auto&& relation,
+                     auto&& projection)
 {
 
-    using difference_type = std::iterator_traits<
-        std::remove_cvref_t<decltype(a1)>>::difference_type;
+    using difference_type =
+        std::iterator_traits<std::remove_cvref_t<decltype(a1)>>::difference_type;
 
     if (ranges::distance(a1, a2) <= difference_type(ranges::size(cache))) {
         MergeExternal(FWD(a1),
@@ -1250,7 +1194,8 @@ constexpr auto Merge(auto&& a1,
                       FWD(b1),
                       FWD(b2),
                       ranges::begin(cache),
-                      compare);
+                      relation,
+                      projection);
     }
     else if (ranges::size(buffer) > 0) {
         MergeInternal(FWD(a1),
@@ -1258,10 +1203,11 @@ constexpr auto Merge(auto&& a1,
                       FWD(b1),
                       FWD(b2),
                       ranges::begin(buffer),
-                      compare);
+                      relation,
+                      projection);
     }
     else {
-        MergeInPlace(FWD(a1), FWD(a2), FWD(b1), FWD(b2), compare);
+        MergeInPlace(FWD(a1), FWD(a2), FWD(b1), FWD(b2), relation, projection);
     }
 }
 
@@ -1269,32 +1215,31 @@ constexpr auto merge_internal_buffers(auto&& buffers,
                                       auto&& subrangeA,
                                       auto&& subrangeB,
                                       auto&& cache,
-                                      auto&& compare)
+                                      auto&& relation,
+                                      auto&& projection)
 {
-    using difference_type = ranges::range_difference_t<
-        std::remove_cvref_t<decltype(subrangeA)>>;
+    using difference_type =
+        ranges::range_difference_t<std::remove_cvref_t<decltype(subrangeA)>>;
 
     // break the remainder of A into blocks. firstA is the
     // uneven-sized first A block
-    ranges::subrange firstA(ranges::begin(subrangeA),
-                            ranges::begin(subrangeA) +
-                                (difference_type(ranges::size(subrangeA)) %
-                                 buffers.block_size));
+    ranges::subrange firstA(
+        ranges::begin(subrangeA),
+        ranges::begin(subrangeA) +
+            (difference_type(ranges::size(subrangeA)) % buffers.block_size));
 
     ranges::subrange ABlocks{ranges::end(firstA), ranges::end(subrangeA)};
     // swap the first value of each A block with the values
     // in buffer1
     ranges::swap_ranges(buffers.buffer1,
-                        ABlocks |
-                            ranges::views::stride(buffers.block_size));
+                        ABlocks | ranges::views::stride(buffers.block_size));
 
     // start rolling the A blocks through the B blocks!
     // when we leave an A block behind we'll need to merge
     // the previous A block with any B blocks that follow
     // it, so track that information as well
     ranges::subrange lastA{firstA};
-    ranges::subrange lastB{ranges::begin(subrangeB),
-                           ranges::begin(subrangeB)};
+    ranges::subrange lastB{ranges::begin(subrangeB), ranges::begin(subrangeB)};
     ranges::chunk_view BBlocks{subrangeB, buffers.block_size};
 
     auto indexA = ranges::begin(buffers.buffer1);
@@ -1322,26 +1267,24 @@ constexpr auto merge_internal_buffers(auto&& buffers,
         // no B blocks left then keep dropping the
         // remaining A blocks.
         if ((ranges::size(lastB) > 0 &&
-             !compare(*(ranges::end(lastB) - 1), *indexA)) ||
+             !relation(projection(*(ranges::end(lastB) - 1)), projection(*indexA))) ||
             blockB == ranges::end(BBlocks)) {
             // figure out where to split the previous B
             // block, and rotate it at the split
-            auto B_split = ranges::lower_bound(lastB, *indexA, compare);
-            auto B_remaining = std::distance(B_split, ranges::end(lastB));
+            auto B_split = ranges::lower_bound(lastB, *indexA, relation, projection);
+            auto B_remaining = ranges::distance(B_split, ranges::end(lastB));
 
             // swap the minimum A block to the
             // beginning of the rolling A blocks
             {
                 // we stride over each A block by block_size to get the
                 // first element which the min element of that block.
-                auto min_elems =
-                    ABlocks | ranges::views::stride(buffers.block_size);
+                auto min_elems = ABlocks | ranges::views::stride(buffers.block_size);
 
                 // we find the minimum min element of each block, and swap
                 // that
                 ranges::swap_ranges(
-                    blockA,
-                    ranges::min_element(min_elems, compare).base());
+                    blockA, ranges::min_element(min_elems, relation, projection).base());
             }
             // swap the first item of the previous A
             // block back with its original value,
@@ -1363,22 +1306,20 @@ constexpr auto merge_internal_buffers(auto&& buffers,
                   B_split,
                   buffers.buffer2,
                   cache,
-                  compare);
+                  relation,
+                  projection);
 
             if (ranges::size(buffers.buffer2) > 0 ||
-                buffers.block_size <=
-                    difference_type(ranges::size(cache))) {
+                buffers.block_size <= difference_type(ranges::size(cache))) {
                 // copy the previous A block into the
                 // cache or buffer2, since that's where
                 // we need it to be when we go to merge
                 // it anyway
-                if (buffers.block_size <=
-                    difference_type(ranges::size(cache))) {
+                if (buffers.block_size <= difference_type(ranges::size(cache))) {
                     ranges::copy(blockA, ranges::begin(cache));
                 }
                 else {
-                    ranges::swap_ranges(blockA,
-                                        ranges::begin(buffers.buffer2));
+                    ranges::swap_ranges(blockA, ranges::begin(buffers.buffer2));
                 }
 
                 // this is equivalent to rotating, but
@@ -1390,43 +1331,38 @@ constexpr auto merge_internal_buffers(auto&& buffers,
                 // order of those items, so instead of
                 // rotating we can just block swap B to
                 // where it belongs
-                std::swap_ranges(B_split,
-                                 B_split + B_remaining,
-                                 ranges::end(blockA) - B_remaining);
+                std::swap_ranges(
+                    B_split, B_split + B_remaining, ranges::end(blockA) - B_remaining);
             }
             else {
                 // we are unable to use the 'buffer2'
                 // trick to speed up the rotation
                 // operation since buffer2 doesn't
                 // exist, so perform a normal rotation
-                std::rotate(
-                    B_split, ranges::begin(blockA), ranges::end(blockA));
+                std::rotate(B_split, ranges::begin(blockA), ranges::end(blockA));
             }
 
             // update the range for the remaining A
             // blocks, and the range remaining from the
             // B block after it was split
             lastA = shift_range(blockA, -B_remaining);
-            lastB = ranges::subrange(ranges::end(lastA),
-                                     ranges::end(lastA) + B_remaining);
+            lastB =
+                ranges::subrange(ranges::end(lastA), ranges::end(lastA) + B_remaining);
 
             // if there are no more A blocks remaining,
             // this step is finished!
             ABlocks = adjust_begin(ABlocks, buffers.block_size);
         }
-        else if (difference_type(ranges::size(*blockB)) <
-                 buffers.block_size) {
+        else if (difference_type(ranges::size(*blockB)) < buffers.block_size) {
             // move the last B block, which is unevenly
             // sized, to before the remaining A blocks,
             // by using a rotation
-            ranges::rotate(ranges::begin(ABlocks),
-                           ranges::begin(*blockB),
-                           ranges::end(*blockB));
+            ranges::rotate(
+                ranges::begin(ABlocks), ranges::begin(*blockB), ranges::end(*blockB));
 
-            lastB = ranges::subrange(
-                ranges::begin(ABlocks),
-                ranges::begin(ABlocks) +
-                    difference_type(ranges::size(*blockB)));
+            lastB = ranges::subrange(ranges::begin(ABlocks),
+                                     ranges::begin(ABlocks) +
+                                         difference_type(ranges::size(*blockB)));
             ABlocks = shift_range(ABlocks, ranges::size(*blockB));
             ++blockB;
         }
@@ -1449,13 +1385,12 @@ constexpr auto merge_internal_buffers(auto&& buffers,
           ranges::end(subrangeB),
           buffers.buffer2,
           cache,
-          compare);
+          relation,
+          projection);
 }
 
-constexpr auto block_sort_internal(auto&& iterator,
-                                   auto&& cache,
-                                   auto&& range,
-                                   auto&& compare)
+constexpr auto block_sort_internal(
+    auto&& iterator, auto&& cache, auto&& range, auto&& relation, auto&& projection)
 {
 
     // this is where the in-place merge logic starts!
@@ -1480,7 +1415,7 @@ constexpr auto block_sort_internal(auto&& iterator,
     // can reuse the same buffers over and over, then redistribute
     // it when we're finished with this level
 
-    InternalBuffers buffers{iterator, range, cache, compare};
+    InternalBuffers buffers{iterator, range, cache, relation, projection};
 
     // now that the two internal buffers have been created, it's
     // time to merge each A+B combination at this level of the
@@ -1494,61 +1429,60 @@ constexpr auto block_sort_internal(auto&& iterator,
             continue;
         }
 
-        if (compare(*(ranges::end(subrangeB) - 1),
-                    *ranges::begin(subrangeA))) {
+        if (relation(projection(*(ranges::end(subrangeB) - 1)),
+                     projection(*ranges::begin(subrangeA)))) {
             // the two ranges are in reverse order, so a simple
             // rotation should fix it
-            std::rotate(ranges::begin(subrangeA),
-                        ranges::end(subrangeA),
-                        ranges::end(subrangeB));
+            std::rotate(
+                ranges::begin(subrangeA), ranges::end(subrangeA), ranges::end(subrangeB));
         }
-        else if (compare(*ranges::end(subrangeA),
-                         *(ranges::end(subrangeA) - 1))) {
+        else if (relation(projection(*ranges::end(subrangeA)),
+                          projection(*(ranges::end(subrangeA) - 1)))) {
             // these two ranges weren't already in order, so we'll
             // need to merge them!
             merge_internal_buffers(
-                buffers, subrangeA, subrangeB, cache, compare);
+                buffers, subrangeA, subrangeB, cache, relation, projection);
         }
     }
 
     // clean up internal buffers
-    buffers.clean_up(compare);
+    buffers.clean_up(relation, projection);
 }
 
 // bottom-up merge sort combined with an in-place merge algorithm for O(1)
 // memory use
-template <ranges::contiguous_range RANGE,
-          typename Comparison = std::less<>>
-constexpr auto algorithm(RANGE range,
-                         Comparison const& compare = {},
+template <class Itr, class Sentinel, class Relation, class Projection>
+constexpr void algorithm(Itr&& first,
+                         Sentinel&& last,
+                         Relation&& relation,
+                         Projection&& projection,
                          std::optional<size_t> const& cache_size_opt = {})
-    -> RANGE
 {
     // map first and last to a C-style array, so we don't have to change
     // the rest of the code (bit of a nasty hack, but it's good enough for
     // now...)
 
-    using T = ranges::range_value_t<RANGE>;
-    using difference_type = ranges::range_difference_t<RANGE>;
+    using T = ranges::iter_value_t<Itr>;
+    using difference_type = ranges::iter_difference_t<Itr>;
 
     // if the array is of size 0, 1, 2, or 3, just sort them like so:
-    if (ranges::size(range) < 4) {
-        sort_four(range, compare);
-        return range;
+    if (ranges::distance(first, last) < 4) {
+        sort_four(first, last, relation, projection);
+        return;
     }
 
     // sort groups of 4-8 items at a time using an unstable sorting
     // network, but keep track of the original item orders to force it to
     // be stable http://pages.ripco.net/~jgamble/nw.html
-    Iterator<RANGE> iterator(difference_type(ranges::size(range)), 4);
+    Iterator<Itr> iterator(difference_type(ranges::distance(first, last)), 4);
 
-    initial_sort(range, iterator, compare);
-    if (ranges::size(range) < 8) {
-        return range;
+    initial_sort(first, last, iterator, relation, projection);
+    if (ranges::distance(first, last) < 8) {
+        return;
     }
 
     // use a small cache to speed up some of the operations
-    auto cache = make_cache<T>(ranges::size(range), cache_size_opt);
+    auto cache = make_cache<T>(ranges::distance(first, last), cache_size_opt);
 
     // then merge sort the higher levels, which can be 8-15, 16-31, 32-63,
     // 64-127, etc.
@@ -1558,10 +1492,12 @@ constexpr auto algorithm(RANGE range,
         // than <= since the block size might be one more than
         // iterator.length())
         if (iterator.length() < difference_type(ranges::size(cache))) {
-            block_sort_cache(iterator, cache, range, compare);
+            block_sort_cache(
+                iterator, cache, ranges::subrange(first, last), relation, projection);
         }
         else {
-            block_sort_internal(iterator, cache, range, compare);
+            block_sort_internal(
+                iterator, cache, ranges::subrange(first, last), relation, projection);
         }
 
         // double the size of each A and B subarray that will be merged in
@@ -1570,99 +1506,201 @@ constexpr auto algorithm(RANGE range,
             break;
         }
     }
-
-    return range;
 }
 
-template <class Ordering>
+template <class Relation, class Projection>
 struct _adapter final
 {
     struct type;
 };
 
-template <class Ordering>
-using adapter = _adapter<std::remove_cvref_t<Ordering>>::type;
-
-namespace _cpo
-{
-constexpr struct _fn
-{
-
-    static constexpr auto operator()(
-        auto const& compare,
-        std::optional<std::size_t> const& cache_size = std::nullopt)
-    {
-        return adapter<decltype(compare)>{cache_size};
-    }
-
-    template <class Ordering>
-    static constexpr auto operator()(
-        ranges::contiguous_range auto&& range,
-        Ordering&& ordering = ordering::ascending{},
-        std::optional<size_t> const& cache_size = std::nullopt)
-    {
-        return tag_invoke(_fn{}, FWD(range), FWD(ordering), cache_size);
-    }
-
-private:
-    template <class Ordering>
-    friend constexpr auto tag_invoke(_fn const& /*unused*/,
-                                     ranges::contiguous_range auto&& range,
-                                     Ordering const& /*ordering*/,
-                                     auto&& cache_size)
-    {
-        return algorithm(FWD(range),
-                         predicate_for_t<Ordering, RNG_VALUE_T(range)>{},
-                         FWD(cache_size));
-    }
-} block_sort;
-} // namespace _cpo
+template <class Relation, class Projection>
+using adapter = _adapter<Relation, Projection>::type;
 
 } // namespace _block_sort
 
-using _block_sort::_cpo::block_sort;
+inline constexpr struct block_sort_fn
+{
+    template <class Relation = unifex::tag_t<ordering::ascending>,
+              class Projection = ranges::identity>
+    requires(not ranges::range<Relation> and not ranges::range<Projection>)
+    static constexpr auto operator()(Relation&& relation = {},
+                                     Projection&& projection = {},
+                                     std::optional<std::size_t> cache_size = std::nullopt)
+        -> _block_sort::adapter<Relation, Projection>
+    {
+        return {std::forward<Relation>(relation),
+                std::forward<Projection>(projection),
+                cache_size};
+    }
+
+    template <class Range,
+              class Relation = unifex::tag_t<ordering::ascending>,
+              class Projection = ranges::identity>
+    requires(unifex::tag_invocable<block_sort_fn,
+                                   Range,
+                                   Relation,
+                                   Projection,
+                                   std::optional<size_t> const&> and
+             ranges::indirect_strict_weak_order<
+                 Relation,
+                 ranges::projected<ranges::iterator_t<Range>, Projection>,
+                 ranges::projected<ranges::iterator_t<Range>, Projection>>)
+    static constexpr auto operator()(
+        Range&& range,
+        Relation&& ordering = {},
+        Projection&& projection = {},
+        std::optional<size_t> const& cache_size = std::nullopt)
+
+        noexcept(unifex::is_nothrow_tag_invocable_v<block_sort_fn,
+                                                    Range,
+                                                    Relation,
+                                                    Projection,
+                                                    std::optional<size_t> const&>)
+            -> unifex::tag_invoke_result_t<block_sort_fn,
+                                           Range,
+                                           Relation,
+                                           Projection,
+                                           std::optional<size_t> const&>
+    {
+        return tag_invoke(block_sort_fn{},
+                          std::forward<Range>(range),
+                          std::forward<Relation>(ordering),
+                          std::forward<Projection>(projection),
+                          cache_size);
+    }
+
+    template <class Itr,
+              class Sentinel,
+              class Relation = unifex::tag_t<ordering::ascending>,
+              class Projection = ranges::identity>
+    requires(unifex::tag_invocable<block_sort_fn,
+                                   Itr,
+                                   Sentinel,
+                                   Relation,
+                                   Projection,
+                                   std::optional<size_t> const&> and
+             ranges::sentinel_for<Sentinel, Itr> and
+             ranges::indirect_strict_weak_order<Relation,
+                                                ranges::projected<Itr, Projection>,
+                                                ranges::projected<Itr, Projection>>)
+    static constexpr auto operator()(
+        Itr&& first,
+        Sentinel&& last,
+        Relation&& ordering = {},
+        Projection&& projection = {},
+        std::optional<size_t> const& cache_size = std::nullopt)
+        noexcept(unifex::is_nothrow_tag_invocable_v<block_sort_fn,
+                                                    Itr,
+                                                    Sentinel,
+                                                    Relation,
+                                                    Projection,
+                                                    std::optional<size_t> const&>)
+            -> unifex::tag_invoke_result_t<block_sort_fn,
+                                           Itr,
+                                           Sentinel,
+                                           Relation,
+                                           Projection,
+                                           std::optional<size_t> const&>
+    {
+        return tag_invoke(block_sort_fn{},
+                          std::forward<Itr>(first),
+                          std::forward<Sentinel>(last),
+                          std::forward<Relation>(ordering),
+                          std::forward<Projection>(projection),
+                          cache_size);
+    }
+
+    template <class Range,
+              class Relation = ordering::ascending_fn,
+              class Projection = ranges::identity>
+    requires(not unifex::tag_invocable<block_sort_fn,
+                                       Range,
+                                       Relation,
+                                       Projection,
+                                       std::optional<size_t> const&> and
+             ranges::contiguous_range<Range> and ranges::sized_range<Range> and
+             ranges::indirect_strict_weak_order<
+                 Relation,
+                 ranges::projected<ranges::iterator_t<Range>, Projection>,
+                 ranges::projected<ranges::iterator_t<Range>, Projection>>)
+    static constexpr auto operator()(Range&& range,
+                                     Relation&& relation = {},
+                                     Projection&& projection = {},
+                                     std::optional<size_t> const& cache_size = {})
+        -> sorted<Range, Relation, Projection>
+    {
+        _block_sort::algorithm(
+            ranges::begin(range), ranges::end(range), relation, projection, cache_size);
+        return {std::forward<Range>(range),
+                std::forward<Relation>(relation),
+                std::forward<Projection>(projection)};
+    }
+
+    template <class Itr,
+              class Sentinel,
+              class Relation = ordering::ascending_fn,
+              class Projection = ranges::identity>
+    requires(not unifex::tag_invocable<block_sort_fn,
+                                       Itr,
+                                       Sentinel,
+                                       Relation,
+                                       Projection,
+                                       std::optional<size_t> const&> and
+             ranges::contiguous_iterator<std::remove_cvref_t<Itr>> and
+             ranges::sentinel_for<std::remove_cvref_t<Sentinel>,
+                                  std::remove_cvref_t<Itr>> and
+             ranges::indirect_strict_weak_order<
+                 Relation,
+                 ranges::projected<std::remove_cvref_t<Itr>, Projection>,
+                 ranges::projected<std::remove_cvref_t<Itr>, Projection>>)
+    static constexpr auto operator()(Itr&& first,
+                                     Sentinel&& last,
+                                     Relation&& relation = {},
+                                     Projection&& projection = {},
+                                     auto&& cache_size = {})
+        -> sorted<Itr, Sentinel, Relation, Projection>
+    {
+        _block_sort::algorithm(first, last, relation, projection, cache_size);
+        return {std::forward<Itr>(first),
+                std::forward<Sentinel>(last),
+                std::forward<Relation>(relation),
+                std::forward<Projection>(projection)};
+    }
+} block_sort;
 
 namespace _block_sort
 {
 
-template <class Ordering>
-struct _adapter<Ordering>::type final
+template <class Relation, class Projection>
+struct _adapter<Relation, Projection>::type final
 {
+    [[no_unique_address]] Relation relation; // NOLINT
+    [[no_unique_address]] Projection projection;
     std::optional<size_t> cache_size;
 
-    template <class Adapter>
+    constexpr auto operator()(this auto&& self, size_t size) -> type
+    {
+        return {std::forward_like<decltype(self)>(self.relation),
+                std::forward_like<decltype(self)>(self.projection),
+                size};
+    }
+
+private:
+    template <class Range, class Adapter>
     requires(std::same_as<std::remove_cvref_t<Adapter>, type>)
-    friend constexpr auto operator|(ranges::contiguous_range auto&& range,
-                                    Adapter&& adapter)
+    friend constexpr auto operator|(Range&& range, Adapter&& adapter)
     {
-        return tag_invoke(block_sort,
-                          FWD(range),
-                          Ordering{},
-                          std::forward<Adapter>(adapter).cache_size);
-    }
-
-    constexpr auto operator()(this auto&& self,
-                              ranges::contiguous_range auto&& range)
-    {
-        return tag_invoke(
-            block_sort, FWD(range), Ordering{}, FWD(self).cache_size);
-    }
-
-    constexpr auto operator()(size_t cache_sz) const
-    {
-        return type{cache_sz};
-    }
-
-    constexpr auto operator()(ranges::contiguous_range auto&& range,
-                              size_t cache_sz) const
-    {
-        return tag_invoke(block_sort, FWD(range), Ordering{}, cache_sz);
+        return block_sort(std::forward<Range>(range),
+                          std::forward_like<Adapter>(adapter.relation),
+                          std::forward_like<Adapter>(adapter.projection),
+                          std::forward_like<Adapter>(adapter.cache_size));
     }
 };
 
 } // namespace _block_sort
-constexpr auto block_sort_ascending = block_sort(ordering::ascending{});
-constexpr auto block_sort_descending = block_sort(ordering::descending{});
+constexpr auto block_sort_ascending = block_sort(ordering::ascending);
+constexpr auto block_sort_descending = block_sort(ordering::descending);
 
 } // namespace algo
 

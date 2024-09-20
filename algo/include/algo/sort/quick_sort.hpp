@@ -19,10 +19,10 @@
 #pragma once
 
 #include "ordering.hpp"
+#include "sorted.hpp"
 #include <algo/partition.hpp>
 
 #include <range/v3/view/subrange.hpp>
-#include <ranges>
 #include <unifex/tag_invoke.hpp>
 
 #include <algo/prelude.hpp>
@@ -33,12 +33,14 @@ namespace algo
 namespace _quick_sort
 {
 
-template <auto const& partition_algorithm>
+template <class Relation, class Projection, class Partition>
 struct Algorithm
 {
-    constexpr static void operator()(auto first, auto last, auto const& cmp)
-    requires(std::random_access_iterator<std::remove_cvref_t<decltype(first)>> and
-             std::random_access_iterator<std::remove_cvref_t<decltype(last)>>)
+    [[no_unique_address]] Relation relation;
+    [[no_unique_address]] Projection projection;
+    [[no_unique_address]] Partition partition_algorithm;
+
+    constexpr void operator()(auto first, auto last) const
     {
         auto size = ranges::distance(first, last);
         if (size < 2) {
@@ -46,131 +48,248 @@ struct Algorithm
         }
         auto const pivot = *(first + ((size + 1) / 2));
 
-        auto middle1 = get<0>(
-            partition_algorithm(ranges::subrange(first, last),
-                                [&, pivot](auto const& elm) { return cmp(elm, pivot); }));
+        auto middle1 = partition_algorithm(first, last, [&, this](auto const& elm) {
+            return relation(projection(elm), projection(pivot));
+        });
 
-        auto middle2 = get<0>(partition_algorithm(
-            ranges::subrange(middle1, last),
-            [&, pivot](auto const& elm) { return !cmp(pivot, elm); }));
+        auto middle2 = partition_algorithm(middle1, last, [&, this](auto const& elm) {
+            return !relation(projection(pivot), projection(elm));
+        });
 
         // all equal elems
         if (middle1 != last) {
-            Algorithm::operator()(first, middle1, cmp);
+            (*this)(first, middle1);
         }
 
         if (middle2 != first) {
-            Algorithm::operator()(middle2, last, cmp);
+            (*this)(middle2, last);
         }
     }
 };
 
-template <std::ranges::contiguous_range RNG, class Partition, class CMP = std::less<>>
-auto algorithm(RNG rng,
-               Partition const& /*partition_algorithm*/,
-               CMP const& cmp = {}) -> RNG
+template <class Range, class Relation, class Projection, class Partition>
+requires ranges::range<Range>
+constexpr void algorithm(Range&& range,
+                         Relation&& relation,
+                         Projection&& projection,
+                         Partition&& partition)
 {
-    static constexpr auto partition_algorithm = Partition{};
-    constexpr auto alg = Algorithm<partition_algorithm>{};
-    if (!ranges::empty(rng)) {
-        alg(std::begin(rng), std::end(rng), cmp);
-    }
-    return rng;
+    Algorithm const alg{std::forward<Relation>(relation),
+                        std::forward<Projection>(projection),
+                        std::forward<Partition>(partition)};
+    alg(ranges::begin(range), ranges::end(range));
 }
 
-template <class Ordering, class Paritition>
+template <class Itr, class Sentinel, class Relation, class Projection, class Partition>
+constexpr void algorithm(Itr&& first,
+                         Sentinel&& last,
+                         Relation&& relation,
+                         Projection&& projection,
+                         Partition&& partition)
+{
+    Algorithm const alg{std::forward<Relation>(relation),
+                        std::forward<Projection>(projection),
+                        std::forward<Partition>(partition)};
+    alg(std::forward<Itr>(first), std::forward<Sentinel>(last));
+}
+
+template <class Relation, class Projection, class Paritition>
 struct _adapter final
 {
     struct type;
 };
 
-template <class Ordering, class Partition>
-using adapter = _adapter<std::remove_cvref_t<Ordering>, Partition>::type;
+template <class Relation, class Projection, class Partition>
+using adapter = _adapter<Relation, Projection, Partition>::type;
 
-namespace _cpo
-{
-inline constexpr struct _fn
-{
-    static constexpr auto operator()(auto const& ordering)
-    {
-        return adapter<decltype(ordering), unifex::tag_t<hoare_partition>>{
-            hoare_partition};
-    }
-
-    template <class Ordering>
-    static constexpr auto operator()(ranges::contiguous_range auto&& range,
-                                     Ordering&& ordering = ordering::ascending{})
-    {
-        return tag_invoke(_fn{}, FWD(range), FWD(ordering), hoare_partition);
-    }
-
-    template <class Partition>
-    static constexpr auto operator()(auto const& ordering,
-                                     Partition const& partition_algorithm)
-    {
-        return adapter<decltype(ordering), Partition>{partition_algorithm};
-    }
-
-    template <class Ordering, class Partition>
-    static constexpr auto operator()(ranges::contiguous_range auto&& range,
-                                     Partition const& partition_algorithm,
-                                     Ordering&& ordering = ordering::ascending{})
-    {
-        return tag_invoke(_fn{}, FWD(range), FWD(ordering), partition_algorithm);
-    }
-
-private:
-    template <class Ordering, class Partition>
-    friend constexpr auto tag_invoke(_fn const& /*unused*/,
-                                     ranges::contiguous_range auto&& range,
-                                     Ordering const& /*ordering*/,
-                                     Partition const& partition_algorithm)
-    {
-        return algorithm(FWD(range),
-                         partition_algorithm,
-                         predicate_for_t<Ordering, RNG_VALUE_T(range)>{});
-    }
-} quick_sort;
-} // namespace _cpo
 } // namespace _quick_sort
 
-using _quick_sort::_cpo::quick_sort;
+inline constexpr struct quick_sort_fn
+{
+    template <class Relation = unifex::tag_t<ordering::ascending>,
+              class Projection = ranges::identity,
+              class Partition = unifex::tag_t<hoare_partition>>
+    requires(not(ranges::range<Relation> or ranges::range<Projection> or
+                 ranges::range<Partition>))
+    static constexpr auto operator()(Relation&& relation = {},
+                                     Projection&& projection = {},
+                                     Partition&& partition = {})
+        -> _quick_sort::adapter<Relation, Projection, Partition>
+    {
+        return {std::forward<Relation>(relation),
+                std::forward<Projection>(projection),
+                std::forward<Partition>(partition)};
+    }
+
+    template <class Range, class Relation, class Projection, class Partition>
+    requires unifex::tag_invocable<quick_sort_fn, Range, Relation, Projection, Partition>
+    static constexpr auto operator()(Range&& range,
+                                     Relation&& relation,
+                                     Projection&& projection,
+                                     Partition&& partition)
+        noexcept(unifex::is_nothrow_tag_invocable_v<quick_sort_fn,
+                                                    Range,
+                                                    Relation,
+                                                    Projection,
+                                                    Partition>)
+            -> unifex::
+                tag_invoke_result_t<quick_sort_fn, Range, Relation, Projection, Partition>
+    {
+        return tag_invoke(quick_sort_fn{},
+                          std::forward<Range>(range),
+                          std::forward<Relation>(relation),
+                          std::forward<Projection>(projection),
+                          std::forward<Partition>(partition));
+    }
+
+    template <class Itr,
+              class Sentinel,
+              class Relation,
+              class Projection,
+              class Partition>
+    requires unifex::tag_invocable<quick_sort_fn,
+                                   Itr,
+                                   Sentinel,
+                                   Relation,
+                                   Projection,
+                                   Partition>
+    static constexpr auto operator()(Itr&& first,
+                                     Sentinel&& last,
+                                     Relation&& relation,
+                                     Projection&& projection,
+                                     Partition&& partition)
+        noexcept(unifex::is_nothrow_tag_invocable_v<quick_sort_fn,
+                                                    Itr,
+                                                    Sentinel,
+                                                    Relation,
+                                                    Projection,
+                                                    Partition>)
+            -> unifex::tag_invoke_result_t<quick_sort_fn,
+                                           Itr,
+                                           Sentinel,
+                                           Relation,
+                                           Projection,
+                                           Partition>
+    {
+        return tag_invoke(quick_sort_fn{},
+                          std::forward<Itr>(first),
+                          std::forward<Sentinel>(last),
+                          std::forward<Relation>(relation),
+                          std::forward<Projection>(projection),
+                          std::forward<Partition>(partition));
+    }
+
+    /**
+     * @brief Calls the default quick sort implementation for generic random access ranges
+     *
+     * @tparam Range A type that satisfies sized_range and random_access_range concepts
+     * @tparam Relation A callable that satisfies strict_weak_order
+     * @tparam Projection A callable that projects into the value types held by `Range`
+     * @tparam Partition A partition scheme, defaults to hoare_partition
+     * @param range A universal reference of type `Range`
+     * @param relation A universal reference of type `Relation`
+     * @param projection A universal reference of type `Projection`
+     * @param partition A universal reference of type `Partition`
+     * @return `sorted_view<Range, Relation, Projection>`
+     */
+    template <class Range,
+              class Relation = unifex::tag_t<ordering::ascending>,
+              class Projection = ranges::identity,
+              class Partition = unifex::tag_t<hoare_partition>>
+    requires(not unifex::
+                 tag_invocable<quick_sort_fn, Range, Relation, Projection, Partition> and
+             ranges::random_access_range<Range> and ranges::sized_range<Range> and
+             ranges::indirect_strict_weak_order<
+                 Relation,
+                 ranges::projected<ranges::iterator_t<Range>, Projection>,
+                 ranges::projected<ranges::iterator_t<Range>, Projection>>)
+    static constexpr auto operator()(Range&& range,
+                                     Relation&& relation = {},
+                                     Projection&& projection = {},
+                                     Partition&& partition = {})
+        noexcept(noexcept(_quick_sort::algorithm(begin(range),
+                                                 end(range),
+                                                 relation,
+                                                 projection,
+                                                 std::forward<Partition>(partition))))
+            -> sorted<Range, Relation, Projection>
+    {
+        _quick_sort::algorithm(ranges::begin(range),
+                               ranges::end(range),
+                               relation,
+                               projection,
+                               std::forward<Partition>(partition));
+        return {std::forward<Range>(range),
+                std::forward<Relation>(relation),
+                std::forward<Projection>(projection)};
+    }
+
+    /**
+     * @brief Calls the default quick sort implementation for generic random access ranges
+     *
+     * @tparam Itr A type that satisfies `ranges::random_access_iterator` concept
+     * @tparam Sentinel A type that satisfies `ranges::sentinel_for<Sentinel, Itr>`
+     * @tparam Relation A callable that satisfies strict_weak_order
+     * @tparam Projection A callable that projects into the value types reference by `Itr`
+     * @tparam Partition A partition scheme, defaults to hoare_partition
+     * @param first A universal reference of type `Itr`
+     * @param last A universal reference of type `Sentinel`
+     * @param relation A universal reference of type `Relation`
+     * @param projection A universal reference of type `Projection`
+     * @param partition A universal reference of type `Partition`
+     * @return `sorted_view<Range, Relation, Projection>`
+     */
+    template <class Itr,
+              class Sentinel,
+              class Relation = unifex::tag_t<ordering::ascending>,
+              class Projection = ranges::identity,
+              class Partition = unifex::tag_t<hoare_partition>>
+    requires(not unifex::tag_invocable<quick_sort_fn,
+                                       Itr,
+                                       Sentinel,
+                                       Relation,
+                                       Projection,
+                                       Partition> and
+             ranges::random_access_iterator<std::remove_cvref_t<Itr>> and
+             ranges::sentinel_for<std::remove_cvref_t<Sentinel>,
+                                  std::remove_cvref_t<Itr>> and
+             ranges::indirect_strict_weak_order<Relation,
+                                                ranges::projected<Itr, Projection>,
+                                                ranges::projected<Itr, Projection>>)
+    static constexpr auto operator()(Itr&& first,
+                                     Sentinel&& last,
+                                     Relation&& relation = {},
+                                     Projection&& projection = {},
+                                     Partition&& partition = {})
+        noexcept(noexcept(_quick_sort::algorithm(
+            first, last, relation, projection, std::forward<Partition>(partition))))
+            -> sorted<Itr, Sentinel, Relation, Projection>
+    {
+        _quick_sort::algorithm(
+            first, last, relation, projection, std::forward<Partition>(partition));
+        return {ranges::subrange{std::forward<Itr>(first), std::forward<Sentinel>(last)},
+                std::forward<Relation>(relation),
+                std::forward<Projection>(projection)};
+    }
+} quick_sort;
 
 namespace _quick_sort
 {
-template <class Ordering, class Partition>
-struct _adapter<Ordering, Partition>::type final
+template <class Relation, class Projection, class Partition>
+struct _adapter<Relation, Projection, Partition>::type final
 {
-    Partition const& partition_algorithm; // NOLINT
+    [[no_unique_address]] Relation relation;
+    [[no_unique_address]] Projection projection;
+    [[no_unique_address]] Partition partition_algorithm; // NOLINT
 
-    template <class Adapter>
-    requires(std::same_as<std::remove_cvref_t<Adapter>, type>)
-    friend constexpr auto operator|(ranges::contiguous_range auto&& range,
-                                    Adapter&& adapter)
+    template <class Range, class Adapter>
+    requires(std::same_as<std::remove_cvref_t<Adapter>, type> and ranges::range<Range>)
+    friend constexpr auto operator|(Range&& range, Adapter&& adapter)
     {
-        return tag_invoke(quick_sort,
-                          FWD(range),
-                          Ordering{},
-                          std::forward<Adapter>(adapter).partition_algorithm);
-    }
-
-    constexpr auto operator()(this auto&& self, ranges::contiguous_range auto&& range)
-    {
-        return tag_invoke(
-            quick_sort, FWD(range), Ordering{}, FWD(self).partition_algorithm);
-    }
-
-    template <class Partition2>
-    constexpr auto operator()(Partition2 const& partition_algorithm2) const
-    {
-        return type{partition_algorithm2};
-    }
-
-    template <class Partition2>
-    constexpr auto operator()(ranges::contiguous_range auto&& range,
-                              Partition2 const& partition_algorithm2) const
-    {
-        return tag_invoke(quick_sort, FWD(range), Ordering{}, partition_algorithm2);
+        return quick_sort(std::forward<Range>(range),
+                          std::forward_like<Adapter>(adapter.relation),
+                          std::forward_like<Adapter>(adapter.projection),
+                          std::forward_like<Adapter>(adapter.partition_algorithm));
     }
 };
 } // namespace _quick_sort

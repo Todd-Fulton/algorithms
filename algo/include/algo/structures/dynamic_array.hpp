@@ -1,0 +1,428 @@
+/**
+ * Copyright (C) 2023  Todd W. Fulton
+ *
+ *  This program is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU Lesser General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU Lesser General Public License for more details.
+ *
+ *  You should have received a copy of the GNU Lesser General Public License
+ *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+ **/
+
+#pragma once
+
+#include "algo/sequence.hpp"
+#include <algorithm>
+#include <cassert>
+#include <exception>
+#include <memory>
+
+#include <algo/container.hpp>
+#include <algo/utility.hpp>
+#include <utility>
+
+namespace algo
+{
+
+template <class T, class Allocator = std::allocator<T>>
+requires(!std::is_reference_v<T>)
+class dynamic_array
+{
+public:
+    using value_type = T;
+    using allocator_type = Allocator;
+
+    static constexpr bool trivially_relocatable = true;
+
+    constexpr dynamic_array() = default;
+    constexpr dynamic_array(dynamic_array const& arr)
+        : alloc_{arr.alloc_}
+    {
+        using AllocT = std::allocator_traits<allocator_type>;
+        assert(arr.begin_ <= arr.end_ <= arr.cap_end_);
+        size_t m;
+        if (size(arr) > 0) {
+            assert(arr.begin_ != nullptr);
+            try {
+                m = algo::capacity(arr);
+                begin_ = AllocT::allocate(alloc_, m);
+                cap_end_ = begin_ + m;
+                end_ = std::copy(arr.begin_, arr.end_, begin_);
+            }
+            catch (...) {
+                AllocT::deallocate(alloc_, begin_, m);
+                begin_ = end_ = cap_end_ = nullptr;
+                std::rethrow_exception(std::current_exception());
+            }
+        }
+    }
+
+    constexpr dynamic_array(dynamic_array&& arr)
+        noexcept(std::is_nothrow_invocable_v<swap_fn, dynamic_array&, dynamic_array&>)
+        : dynamic_array()
+    {
+        algo::swap(*this, arr);
+    }
+
+    constexpr dynamic_array& operator=(dynamic_array arr)
+        noexcept(std::is_nothrow_invocable_v<swap_fn, dynamic_array&, dynamic_array&>)
+    {
+        algo::swap(*this, arr);
+        return *this;
+    }
+
+    constexpr ~dynamic_array()
+    {
+        using AllocT = std::allocator_traits<allocator_type>;
+        for (auto itr = this->begin_; itr != this->end_; ++itr) {
+            AllocT::destroy(alloc_, itr);
+        }
+        AllocT::deallocate(alloc_, begin_, usize(*this));
+        begin_ = end_ = nullptr;
+    }
+
+private:
+    value_type* begin_{nullptr};
+    value_type* end_{nullptr};
+    value_type* cap_end_{nullptr};
+
+    [[no_unique_address]] allocator_type alloc_;
+
+    using cursor_type = value_type*;
+
+    constexpr void bounds_check([[maybe_unused]] index_t const& cur) const noexcept
+    {
+        assert(cur >= 0);
+        assert(cur < algo::terminal(*this));
+    }
+
+    constexpr friend void tag_invoke([[maybe_unused]] swap_fn _,
+                                     dynamic_array& left,
+                                     dynamic_array& right)
+        noexcept(std::is_nothrow_swappable_v<value_type*> and
+                 std::is_nothrow_swappable_v<distance_t> and
+                 std::is_nothrow_swappable_v<allocator_type>)
+    requires(std::is_nothrow_swappable_v<allocator_type>)
+    {
+        algo::swap(left.begin_, right.begin_);
+        algo::swap(left.end_, right.end_);
+        algo::swap(left.alloc_, right.alloc_);
+    }
+
+    constexpr friend auto tag_invoke([[maybe_unused]] first_fn tag,
+                                     [[maybe_unused]] dynamic_array const& arr) noexcept
+        -> index_t
+    {
+        return 0;
+    }
+
+    constexpr friend auto tag_invoke([[maybe_unused]] terminal_fn tag,
+                                     dynamic_array const& arr) noexcept -> index_t
+    {
+        return arr.end_ - arr.begin_;
+    }
+
+    constexpr friend auto tag_invoke([[maybe_unused]] inc_fn tag,
+                                     dynamic_array const& arr,
+                                     lvalue_t<index_t> cur) noexcept -> lvalue_t<index_t>
+    {
+        return algo::inc(arr, cur, 1);
+    }
+
+    constexpr friend auto tag_invoke([[maybe_unused]] inc_fn tag,
+                                     [[maybe_unused]] dynamic_array const& arr,
+                                     lvalue_t<index_t> cur,
+                                     distance_t n) noexcept -> lvalue_t<index_t>
+    {
+        cur += n;
+        assert(cur <= algo::size(arr));
+        assert(cur >= 0);
+        return cur;
+    }
+
+    constexpr friend auto tag_invoke([[maybe_unused]] dec_fn tag,
+                                     dynamic_array const& arr,
+                                     lvalue_t<index_t> cur) noexcept -> lvalue_t<index_t>
+    {
+        return algo::dec(arr, cur, 1);
+    }
+
+    constexpr friend auto tag_invoke([[maybe_unused]] dec_fn tag,
+                                     [[maybe_unused]] dynamic_array const& arr,
+                                     lvalue_t<index_t> cur,
+                                     distance_t n) noexcept -> lvalue_t<index_t>
+    {
+        cur -= n;
+        assert(cur >= 0);
+        return cur;
+    }
+
+    constexpr friend auto tag_invoke([[maybe_unused]] is_last_fn tag,
+                                     dynamic_array const& arr,
+                                     const_lvalue_t<index_t> cur) noexcept -> bool
+    {
+        return arr.end_ == cur;
+    }
+
+    constexpr friend auto tag_invoke([[maybe_unused]] distance_fn tag,
+                                     [[maybe_unused]] dynamic_array const& arr,
+                                     index_t a,
+                                     index_t b) noexcept -> distance_t
+    {
+        // only compare cursors within the bounds of the internal buffer
+        assert(a >= 0);
+        assert(a <= algo::capacity(arr));
+        assert(b >= 0);
+        assert(b <= algo::capacity(arr));
+        return b - a;
+    }
+
+    constexpr friend auto tag_invoke([[maybe_unused]] size_fn tag,
+                                     dynamic_array const& arr) noexcept -> distance_t
+    {
+        assert(arr.end_ >= arr.begin_);
+        return arr.end_ - arr.begin_;
+    }
+
+    constexpr friend auto tag_invoke([[maybe_unused]] usize_fn tag,
+                                     dynamic_array const& arr) noexcept -> size_t
+    {
+        assert(arr.end_ >= arr.begin_);
+        return size_t(arr.end_ - arr.begin_);
+    }
+
+    constexpr friend auto tag_invoke([[maybe_unused]] capacity_fn tag,
+                                     dynamic_array const& arr) noexcept -> distance_t
+    {
+        assert(arr.cap_end_ >= arr.begin_);
+        return arr.cap_end_ - arr.begin_;
+    }
+
+    constexpr friend auto tag_invoke([[maybe_unused]] allocator_fn tag,
+                                     dynamic_array const& arr) noexcept -> allocator_type
+    {
+        return arr.alloc_;
+    }
+
+    constexpr friend auto tag_invoke([[maybe_unused]] empty_fn tag,
+                                     dynamic_array const& arr) noexcept -> bool
+    {
+        assert(arr.cap_end_ >= arr.begin_);
+        return arr.begin_ == arr.end_;
+    }
+
+    constexpr friend void tag_invoke([[maybe_unused]] reserve_fn tag,
+                                     dynamic_array& arr,
+                                     size_t n)
+    {
+        const auto old_cap = size_t(capacity(arr));
+        if (n > old_cap) {
+            const auto sz = size(arr);
+            n = std::max(size_t(old_cap + (old_cap / 2)), size_t(old_cap + n));
+            T* buff = std::allocator_traits<allocator_type>::allocate(arr.alloc_, n);
+            relocate_at_n(arr.begin_, buff, size_t(sz));
+            std::swap(arr.begin_, buff);
+            arr.end_ = arr.begin_ + sz;
+            arr.cap_end_ = arr.begin_ + distance_t(n);
+            if (buff != nullptr) {
+                std::allocator_traits<allocator_type>::deallocate(
+                    arr.alloc_, buff, old_cap);
+            }
+        }
+    }
+
+    template <class... Args>
+    requires(std::constructible_from<T, Args...> and sizeof...(Args) > 0)
+    constexpr friend auto tag_invoke([[maybe_unused]] insert_fn tag,
+                                     dynamic_array& arr,
+                                     index_t idx,
+                                     size_t cnt,
+                                     Args&&... args) -> index_t
+    {
+
+        auto cap = capacity(arr);
+        auto const sz = size(arr);
+        T* dest = arr.begin_;
+
+        assert(idx >= 0);
+        assert(idx <= sz);
+        [[assume(idx >= 0 and idx <= sz)]];
+
+        if (cap == sz) {
+            cap = std::max(distance_t(8), cap + std::max(cap / 2, distance_t(cnt)));
+            dest =
+                std::allocator_traits<allocator_type>::allocate(arr.alloc_, size_t(cap));
+        }
+        if constexpr (nothrow_relocatable<T>) {
+            relocate_at_n(arr.begin_, dest, size_t(idx));
+            relocate_at_n(
+                arr.begin_ + idx, dest + idx + distance_t(cnt), size_t(sz - idx));
+        }
+        else {
+            try {
+                relocate_at_n(arr.begin_, dest, size_t(idx));
+                relocate_at_n(
+                    arr.begin_ + idx, dest + idx + distance_t(cnt), size_t(sz - idx));
+            }
+            catch (...) {
+                if (arr.begin_ != dest) {
+                    std::allocator_traits<allocator_type>::deallocate(
+                        arr.alloc_, dest, size_t(cap));
+                }
+                std::rethrow_exception(std::current_exception());
+            }
+        }
+        if (arr.begin_ != dest) {
+            std::allocator_traits<allocator_type>::deallocate(
+                arr.alloc_, arr.begin_, size_t(capacity(arr)));
+        }
+        arr.begin_ = dest;
+        arr.end_ = arr.begin_ + sz + distance_t(cnt);
+        arr.cap_end_ = arr.begin_ + cap;
+        for (size_t i = 0; i < cnt; ++i) {
+            std::allocator_traits<allocator_type>::construct(
+                arr.alloc_, arr.begin_ + idx + i, std::forward<Args>(args)...);
+        }
+        return idx;
+    }
+
+    template <class... Args>
+    requires(std::constructible_from<T, Args...> and sizeof...(Args) > 0)
+    constexpr friend auto tag_invoke([[maybe_unused]] insert_fn tag,
+                                     dynamic_array& arr,
+                                     index_t idx,
+                                     Args&&... args) -> index_t
+    {
+        return algo::insert(arr, idx, size_t(1), std::forward<Args>(args)...);
+    }
+
+    template <sized_sequence Seq>
+    requires(std::constructible_from<T, element_t<Seq>>)
+    static constexpr auto tag_invoke([[maybe_unused]] insert_fn tag,
+                                     dynamic_array& arr,
+                                     index_t idx,
+                                     Seq&& seq) -> index_t
+    {
+        auto cap = capacity(arr);
+        auto sz = size(arr);
+        auto cnt = size(seq);
+        T* dest = arr.begin_;
+
+        assert(idx >= 0);
+        assert(idx <= sz);
+        [[assume(idx >= 0 and idx <= sz)]];
+
+        if (cap - sz < cnt) {
+            cap = std::max(distance_t(8), cap + std::max(cap / 2, distance_t(cnt)));
+            dest =
+                std::allocator_traits<allocator_type>::allocate(arr.alloc_, size_t(cap));
+        }
+        if constexpr (nothrow_relocatable<T>) {
+            relocate_at_n(arr.begin_, dest, size_t(idx));
+            relocate_at_n(arr.begin_ + idx, dest + idx + cnt, size_t(sz - idx));
+        }
+        else {
+            try {
+                relocate_at_n(arr.begin_, dest, size_t(idx));
+                relocate_at_n(arr.begin_ + idx, dest + idx + cnt, size_t(sz - idx));
+            }
+            catch (...) {
+                if (arr.begin_ != dest) {
+                    std::allocator_traits<allocator_type>::deallocate(
+                        arr.alloc_, dest, size_t(cap));
+                }
+                std::rethrow_exception(std::current_exception());
+            }
+        }
+        if (arr.begin_ != dest) {
+            std::allocator_traits<allocator_type>::deallocate(
+                arr.alloc_, arr.begin_, capacity(arr));
+        }
+        arr.begin_ = dest;
+        arr.end_ = arr.begin_ + sz + cnt;
+        arr.cap_end_ = arr.begin_ + cap;
+        for (auto c1 = idx, c2 = first(seq); c2 != cnt; inc(seq, c2), inc(arr, c1)) {
+            std::allocator_traits<allocator_type>::construct(
+                arr.alloc_, arr.begin_ + c1, std::forward_like<Seq>(read_at(seq, c2)));
+        }
+        return idx;
+    }
+
+    friend constexpr auto tag_invoke([[maybe_unused]] remove_fn tag,
+                                     dynamic_array& arr,
+                                     index_t fst,
+                                     index_t lst) -> index_t
+    {
+
+        assert(fst <= lst);
+        assert(fst >= 0);
+        [[assume(fst <= lst)]];
+        [[assume(fst >= 0)]];
+        const auto term = terminal(arr);
+        assert(lst <= term);
+        [[assume(lst <= term)]];
+
+        const auto cnt = distance(arr, fst, lst);
+        const auto rem = distance(arr, lst, term);
+        if (cnt > 0 or fst != term) {
+            if constexpr (std::is_trivially_destructible_v<T> or
+                          is_trivially_relocatable_v<T>) {
+                __builtin_memset(
+                    static_cast<char*>(arr.begin_ + fst), 0, sizeof(T) * cnt);
+                relocate_at_n(arr.begin_ + lst, arr.begin_ + fst, rem);
+            }
+            else {
+                T* src = arr.begin_ + lst;
+                T* dst = arr.begin_ + fst;
+                if (cnt < rem) {
+
+                    for (; dst < lst; std::advance(dst, 1), std::advance(src, 1)) {
+                        std::allocator_traits<allocator_type>::destroy(arr.alloc_, dst);
+                        relocate_at(src, dst);
+                    }
+                    relocate_at_n(src, dst, rem - cnt);
+                }
+                else {
+                    for (T const* const lim = dst + rem; dst < lim;
+                         std::advance(dst, 1), std::advance(src, 1)) {
+                        std::allocator_traits<allocator_type>::destroy(arr.alloc_, dst);
+                        relocate_at(src, dst);
+                    }
+                    for (T const* const lim = arr.end_; dst < lim; std::advance(src, 1)) {
+                        std::allocator_traits<allocator_type>::destroy(arr.alloc_, src);
+                    }
+                }
+            }
+            arr.end_ -= cnt;
+        }
+        return std::min(terminal(arr), lst);
+    }
+
+    friend constexpr auto tag_invoke([[maybe_unused]] remove_fn tag,
+                                     dynamic_array& arr,
+                                     index_t pos) -> index_t
+    {
+        if (pos != algo::terminal(arr)) {
+            return algo::remove(arr, pos, algo::next(arr, pos));
+        }
+        return pos;
+    }
+
+    template <class Arr>
+    requires(std::same_as<std::remove_cvref_t<Arr>, dynamic_array>)
+    friend constexpr auto tag_invoke([[maybe_unused]] read_at_fn tag,
+                                     Arr&& arr,
+                                     index_t cur) -> decltype(arr.begin_[cur])
+    {
+        arr.bounds_check(cur);
+        return arr.begin_[cur];
+    }
+};
+
+} // namespace algo

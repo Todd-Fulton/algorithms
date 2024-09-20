@@ -19,10 +19,10 @@
 #pragma once
 
 
-#include <ranges>
+#include <range/v3/range_concepts.hpp>
 namespace algo {
 
-template <std::ranges::forward_range RNG, class CMP = std::less<>>
+template <ranges::forward_range RNG, class CMP = std::less<>>
 void selection_sort(RNG& rng, CMP const& cmp = CMP{})
 {
     auto i_itr = std::begin(rng);
@@ -36,7 +36,7 @@ void selection_sort(RNG& rng, CMP const& cmp = CMP{})
         j_itr = i_itr;
         ++j_itr;
 
-        for (; j_itr != std::end(rng); std::advance(j_itr, 1))
+        for (; j_itr != ranges::end(rng); std::advance(j_itr, 1))
         {
             if(cmp(*j_itr, *sel)) {
                 sel = j_itr;
@@ -45,8 +45,7 @@ void selection_sort(RNG& rng, CMP const& cmp = CMP{})
 
         if (sel != i_itr)
         {
-            using std::swap;
-            swap(*i_itr, *sel);
+            ranges::iter_swap(i_itr, sel);
         }
     }
 }

@@ -15,5 +15,13 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  **/
 
-#include "search/linear_search.hpp"
 #include "search/binary_search.hpp"
+#include "search/linear_search.hpp"
+
+namespace algo
+{
+inline constexpr struct search_fn
+{
+} search;
+
+} // namespace algo

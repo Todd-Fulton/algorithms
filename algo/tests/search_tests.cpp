@@ -15,90 +15,98 @@
  *  along with this program.  If not, see <https://www.gnu.org/licenses/>.
  **/
 
+#include "rand_range.hpp"
+
 #include <gtest/gtest.h>
 
 #include <algo/search.hpp>
 #include <algo/sort.hpp>
 
-#include <algorithm>
 #include <list>
 #include <random>
 #include <vector>
 
-extern unsigned long long seed; // NOLINT
-
 using std::mt19937;
 using std::uniform_int_distribution;
 using std::vector;
-using std::ranges::for_each;
-
-static constexpr size_t TEST_RANGE_SIZE = 20;
 
 TEST(Searching, LinearSearchRandom_Vector)
 {
 
-    vector<int> given{};
-    given.resize(TEST_RANGE_SIZE);
-
     mt19937 gen{seed}; // NOLINT
-    uniform_int_distribution<> val_distrib{0, 10000};
-    uniform_int_distribution<size_t> idx_distrib(0, TEST_RANGE_SIZE - 1);
+    uniform_int_distribution<size_t> idx_distrib(0, range_size - 1);
 
-    for_each(given, [&](auto& x) { x = val_distrib(gen); });
+    auto given = testing::rand_range() | algo::quick_sort();
 
     auto rand_idx = idx_distrib(gen);
     auto key = given[rand_idx];
+
+    while (rand_idx >= 0 and given[rand_idx - 1] == given[rand_idx]) {
+        --rand_idx;
+    }
 
     auto expected = std::begin(given) + ptrdiff_t(rand_idx);
 
     EXPECT_EQ(algo::linear_search(given, key), expected);
 }
 
+TEST(Searching, LinearSearchRandom_List)
+{
+
+    mt19937 gen{seed}; // NOLINT
+    uniform_int_distribution<size_t> idx_distrib(0, range_size - 1);
+
+    auto given = testing::rand_range<std::list>() | algo::bubble_sort();
+
+    auto rand_idx = idx_distrib(gen);
+    auto expected = ranges::begin(given);
+    std::advance(expected, rand_idx);
+
+    for(auto itr = ranges::begin(given); itr != ranges::end(given); ++itr) {
+        if (*itr == *expected) {
+            expected = itr;
+            break;
+        }
+    }
+
+    EXPECT_EQ(algo::linear_search(given, *expected), expected);
+}
+
 TEST(Searching, BinarySearchRandom_Vector)
 {
 
-    vector<int> given{};
-    given.resize(TEST_RANGE_SIZE);
-
     mt19937 gen{seed}; // NOLINT
-    uniform_int_distribution<> val_distrib{0, 10000};
-    uniform_int_distribution<size_t> idx_distrib(0, TEST_RANGE_SIZE - 1);
+    uniform_int_distribution<size_t> idx_distrib(0, range_size - 1);
 
-    for_each(given, [&](auto& x) { x = val_distrib(gen); });
-    algo::merge_sort(given);
+    auto given = testing::rand_range() | algo::quick_sort();
 
     auto rand_idx = idx_distrib(gen);
     auto key = given[rand_idx];
 
-    auto expected = std::begin(given) + ptrdiff_t(rand_idx);
+    while (rand_idx >= 0 and given[rand_idx - 1] == given[rand_idx]) {
+        --rand_idx;
+    }
+
+    auto expected = begin(given) + ptrdiff_t(rand_idx);
 
     EXPECT_EQ(algo::binary_search(given, key), expected);
 }
 
-TEST(Searching, BinarySearchRandom_List)
+TEST(Searching, BinarySearchReversedRandom_Vector)
 {
-
-    std::list<int> given{};
-
     mt19937 gen{seed}; // NOLINT
-    uniform_int_distribution<> val_distrib{0, 10000};
-    uniform_int_distribution<size_t> idx_distrib(0, TEST_RANGE_SIZE - 1);
+    uniform_int_distribution<size_t> idx_distrib(0, range_size - 1);
 
-    for_each(
-        std::ranges::iota_view(0ULL, TEST_RANGE_SIZE),
-        [&]([[maybe_unused]] auto const& _) { given.emplace_back(val_distrib(gen)); });
-
-    given = std::move(given) | algo::insertion_sort();
+    auto given = testing::rand_range() | algo::quick_sort(algo::ordering::descending);
 
     auto rand_idx = idx_distrib(gen);
+    auto key = given[rand_idx];
 
-    auto expected = std::begin(given);
-    while (rand_idx != 0) {
-        ++expected;
+    while (rand_idx >= 0 and given[rand_idx - 1] == given[rand_idx]) {
         --rand_idx;
     }
 
-    auto key = *expected;
+    auto expected = begin(given) + ptrdiff_t(rand_idx);
 
     EXPECT_EQ(algo::binary_search(given, key), expected);
 }

@@ -5,4 +5,3 @@ target_sources(${PROJECT_NAME}
   )
 
 add_subdirectory(algo)
-

@@ -13,3 +13,5 @@ target_sources(${PROJECT_NAME}
 add_subdirectory(sort)
 add_subdirectory(search)
 add_subdirectory(partition)
+add_subdirectory(structures)
+add_subdirectory(functional)
