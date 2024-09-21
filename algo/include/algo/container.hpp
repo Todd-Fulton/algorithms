@@ -546,7 +546,7 @@ private:
                                      To const& to)
         noexcept(noexcept(std::ranges::distance(from.itr_, to.itr_))) -> distance_t
     {
-        assert(from.rng_ == to.rng_ == std::addressof(rng));
+        assert(from.rng_ == to.rng_ and to.rng_ == std::addressof(rng));
         return std::ranges::distance(from.itr_, to.itr_);
     }
 
@@ -624,7 +624,7 @@ private:
             std::ranges::next(std::forward_like<Cursor>(cur.itr_),
                               std::forward_like<Term>(term.itr_))))) -> range_cursor
     {
-        assert(std::addressof(rng) == cur.rng_ == term.rng_);
+        assert(std::addressof(rng) == cur.rng_ and cur.rng_ == term.rng_);
         return algo::from_iterator(rng,
                                    std::ranges::next(std::forward_like<Cursor>(cur.itr_),
                                                      std::forward_like<Term>(term.itr_)));
@@ -662,7 +662,7 @@ private:
                               offset,
                               std::forward_like<Term>(term.itr_))))) -> range_cursor
     {
-        assert(std::addressof(rng) == cur.rng_ == term.rng_);
+        assert(std::addressof(rng) == cur.rng_ and cur.rng_ == term.rng_);
         return algo::from_iterator(rng,
                                    std::ranges::next(std::forward_like<Cursor>(cur.itr_),
                                                      offset,
@@ -732,7 +732,7 @@ private:
                               offset,
                               std::forward_like<Term>(term.itr_))))) -> range_cursor
     {
-        assert(std::addressof(rng) == cur.rng_ == term.rng_);
+        assert(std::addressof(rng) == cur.rng_ and cur.rng_ == term.rng_);
         return algo::from_iterator(rng,
                                    std::ranges::prev(std::forward_like<Cursor>(cur.itr_),
                                                      offset,
