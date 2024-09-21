@@ -45,15 +45,21 @@ public:
         : alloc_{arr.alloc_}
     {
         using AllocT = std::allocator_traits<allocator_type>;
-        assert(arr.begin_ <= arr.end_ <= arr.cap_end_);
+        assert(arr.begin_ <= arr.end_ and arr.end_ <= arr.cap_end_);
         size_t m;
-        if (size(arr) > 0) {
+        if (algo::size(arr) > 0) {
             assert(arr.begin_ != nullptr);
+            m = algo::capacity(arr);
+            begin_ = AllocT::allocate(alloc_, m);
+            end_ = begin_;
+            cap_end_ = begin_ + m;
             try {
-                m = algo::capacity(arr);
-                begin_ = AllocT::allocate(alloc_, m);
-                cap_end_ = begin_ + m;
-                end_ = std::copy(arr.begin_, arr.end_, begin_);
+                if constexpr (std::is_trivially_copyable_v<value_type>) {
+                    std::memcpy(begin_, arr.begin_, algo::size(arr));
+                }
+                else {
+                    end_ = std::uninitialized_copy(arr.begin_, arr.end_, end_);
+                }
             }
             catch (...) {
                 AllocT::deallocate(alloc_, begin_, m);
