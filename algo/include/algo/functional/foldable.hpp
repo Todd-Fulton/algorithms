@@ -136,7 +136,7 @@ inline constexpr struct foldr_fn
         auto result = std::forward<B>(init);
         auto cur = algo::terminal(foldable);
         auto const term = first(foldable);
-        do { // NOLINT
+        while (cur != term) {
             algo::dec(foldable, cur);
             if constexpr (std::movable<std::remove_cvref_t<B>> and
                           std::invocable<Fn, const_element_t<Fa>, rvalue_t<B>>) {
@@ -145,7 +145,7 @@ inline constexpr struct foldr_fn
             else {
                 result = std::invoke(fn, algo::read_at(foldable, cur), result);
             }
-        } while (cur != term);
+        }
         return result;
     }
 } foldr;
