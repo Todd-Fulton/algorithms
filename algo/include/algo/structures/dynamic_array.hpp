@@ -170,6 +170,7 @@ public:
                 }
             }
             else {
+                // value_type is not nothrow copy assignable, so we can't avoid allocation
                 new_memory_copy_(other, other.alloc_);
             }
             alloc_ = other.alloc_;
