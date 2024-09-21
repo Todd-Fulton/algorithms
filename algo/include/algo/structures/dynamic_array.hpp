@@ -17,7 +17,7 @@
 
 #pragma once
 
-#include "algo/sequence.hpp"
+#include <algo/sequence.hpp>
 #include <algorithm>
 #include <cassert>
 #include <exception>
@@ -70,24 +70,117 @@ public:
         }
     }
 
-    constexpr dynamic_array(dynamic_array&& arr)
-        noexcept(std::is_nothrow_invocable_v<swap_fn, dynamic_array&, dynamic_array&>)
+    constexpr dynamic_array(dynamic_array&& arr) noexcept(algo::swappable<dynamic_array>)
         : dynamic_array()
     {
         algo::swap(*this, arr);
     }
 
-    constexpr dynamic_array& operator=(dynamic_array arr)
-        noexcept(std::is_nothrow_invocable_v<swap_fn, dynamic_array&, dynamic_array&>)
+private:
+    /**
+     * @brief Always allocate new memory for a copy. Handles cases where
+     * copy throws.
+     *
+     * @param other The array to copy.
+     * @param new_alloc The allocator to use for the new memory, may be this->alloc_
+     * if allocators do not propagate_on_container_copy_assignment.
+     */
+    constexpr void new_memory_copy_(dynamic_array const& other, allocator_type& new_alloc)
     {
-        algo::swap(*this, arr);
+        using AllocT = std::allocator_traits<allocator_type>;
+        auto const other_size = algo::size(other);
+        auto new_space_ = AllocT::allocate(new_alloc, other_size);
+        if constexpr (std::is_nothrow_copy_assignable_v<value_type>) {
+            std::uninitialized_copy(other.begin_, other.end_, new_space_);
+        }
+        else {
+            try {
+                std::uninitialized_copy(other.begin_, other.end_, new_space_);
+            }
+            catch (...) {
+                AllocT::deallocate(new_alloc, new_space_);
+                throw;
+            }
+        }
+        AllocT::deallocate(alloc_, begin_, algo::capacity(*this));
+        begin_ = new_space_;
+        end_ = std::next(begin_, std::ptrdiff_t(other_size));
+        cap_end_ = end_;
+    }
+
+    /**
+     * @brief An optimization for nothrow copy assignable types.
+     * Possibly vvoids an allocation if this array has a large enough capacity.
+     *
+     * @param other The array to copy
+     * @param new_alloc The allocator to use for new memory (if needed).
+     */
+    constexpr void copy_(dynamic_array const& other, allocator_type& new_alloc)
+    requires(std::is_nothrow_copy_assignable_v<value_type>)
+    {
+        auto const other_size = algo::size(other);
+        if (algo::capacity(*this) >= other_size) {
+            auto const cnt = std::min(algo::size(*this), other_size);
+            auto new_end_ = std::copy_n(other.begin_, cnt, begin_);
+            if (algo::size(*this) >= other_size) {
+                for (auto i = new_end_; i < end_; std::advance(i, 1)) {
+                    std::destroy_at(i);
+                }
+                end_ = new_end_;
+            }
+            else {
+                end_ = std::uninitialized_copy_n(
+                    other.begin_ + std::ptrdiff_t(cnt), other_size - cnt, new_end_);
+            }
+        }
+        else {
+            new_memory_copy_(other, new_alloc);
+        }
+    }
+
+public:
+    constexpr dynamic_array& operator=(dynamic_array const& other)
+    requires(not std::allocator_traits<
+             allocator_type>::propagate_on_container_copy_assignment::value)
+    {
+        if (this != &other) {
+            if constexpr (std::is_nothrow_copy_assignable_v<value_type>) {
+                copy_(other, alloc_);
+            }
+            else {
+                new_memory_copy_(other, alloc_);
+            }
+        }
+        return *this;
+    }
+
+    constexpr dynamic_array& operator=(dynamic_array const& other)
+    requires(std::allocator_traits<
+             allocator_type>::propagate_on_container_copy_assignment::value)
+    {
+
+        if (this != &other) {
+            if constexpr (std::is_nothrow_copy_assignable_v<value_type>) {
+                if (alloc_ != other.alloc_) {
+                    new_memory_copy_(other, other.alloc_);
+                }
+                else {
+                    // same allocator, so we may be able to avoid allocation
+                    copy_(other, other.alloc_);
+                }
+            }
+            else {
+                new_memory_copy_(other, other.alloc_);
+            }
+            alloc_ = other.alloc_;
+        }
         return *this;
     }
 
     constexpr ~dynamic_array()
     {
         using AllocT = std::allocator_traits<allocator_type>;
-        for (auto itr = this->begin_; itr != this->end_; std::advance(itr)) {
+        for (auto itr = this->begin_; itr != this->end_; std::advance(itr, 1)) {
             AllocT::destroy(alloc_, itr);
         }
         AllocT::deallocate(alloc_, begin_, usize(*this));
@@ -388,7 +481,6 @@ private:
                 T* src = arr.begin_ + lst;
                 T* dst = arr.begin_ + fst;
                 if (cnt < rem) {
-
                     for (; dst < lst; std::advance(dst, 1), std::advance(src, 1)) {
                         std::allocator_traits<allocator_type>::destroy(arr.alloc_, dst);
                         relocate_at(src, dst);
