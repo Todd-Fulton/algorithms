@@ -90,12 +90,10 @@ void algorithm(Itr start,
         // shift elements from i to key_iter by one
         // TODO: if RNG is contiguous and value_type is trivially
         // relocatable then use memcpy
-        if (i != key_itr) {
-            auto j = i;
-            do { // NOLINT
-                ++j;
-                ranges::iter_swap(i, j);
-            } while (j != key_itr);
+        auto j = i;
+        while (j != key_itr) {
+            ++j;
+            ranges::iter_swap(i, j);
         }
 
         // insert key into i
@@ -107,8 +105,8 @@ template <class Itr, class Sentinel, class Relation, class Projection>
 requires(ranges::bidirectional_iterator<std::remove_cvref_t<Itr>> and
          ranges::sentinel_for<std::remove_cvref_t<Sentinel>, std::remove_cvref_t<Itr>> and
          ranges::indirect_strict_weak_order<Relation,
-                                   ranges::projected<Itr, Projection>,
-                                   ranges::projected<Itr, Projection>>)
+                                            ranges::projected<Itr, Projection>,
+                                            ranges::projected<Itr, Projection>>)
 void algorithm(Itr start,
                Sentinel end,
                Relation const& relation,
@@ -118,15 +116,14 @@ void algorithm(Itr start,
     if (start == end) {
         return;
     }
-    auto key_itr=start;
+    auto key_itr = start;
     ++key_itr;
     for (; key_itr != end; ++key_itr) {
         auto key{move_or_copy(*key_itr)};
         auto j = key_itr;
         auto i = j;
         --i;
-        for (; j != start and relation(projection(key), projection(*i));
-             --i, --j) {
+        for (; j != start and relation(projection(key), projection(*i)); --i, --j) {
             *j = move_or_copy(*i);
         }
 
@@ -181,17 +178,15 @@ inline constexpr struct insertion_sort_fn
               class Relation = unifex::tag_t<ordering::ascending>,
               class Projection = ranges::identity>
     requires unifex::tag_invocable<insertion_sort_fn, Itr, Sentinel, Relation, Projection>
-    static constexpr auto operator()(
-        Itr&& first,
-        Sentinel&& last,
-        Relation&& relation = {},
-        Projection&& projection =
-            {}) noexcept(unifex::is_nothrow_tag_invocable_v<insertion_sort_fn,
-                                                            Itr,
-                                                            Sentinel,
-                                                            Relation,
-                                                            Projection>)
-        -> unifex::
+    static constexpr auto operator()(Itr&& first,
+                                     Sentinel&& last,
+                                     Relation&& relation = {},
+                                     Projection&& projection = {})
+        noexcept(unifex::is_nothrow_tag_invocable_v<insertion_sort_fn,
+                                                    Itr,
+                                                    Sentinel,
+                                                    Relation,
+                                                    Projection>) -> unifex::
             tag_invoke_result_t<insertion_sort_fn, Itr, Sentinel, Relation, Projection>
     {
         return tag_invoke(insertion_sort_fn{},
@@ -229,14 +224,14 @@ inline constexpr struct insertion_sort_fn
               class Sentinel,
               class Relation = unifex::tag_t<ordering::ascending>,
               class Projection = ranges::identity>
-    requires(not unifex::
-                 tag_invocable<insertion_sort_fn, Itr, Sentinel, Relation, Projection> and
-             ranges::forward_iterator<std::remove_cvref_t<Itr>> and
-             ranges::sentinel_for<std::remove_cvref_t<Sentinel>,
-                                  std::remove_cvref_t<Itr>> and
-             ranges::indirect_strict_weak_order<Relation,
-                                                ranges::projected<Itr, Projection>,
-                                                ranges::projected<Itr, Projection>>)
+    requires(
+        not unifex::
+            tag_invocable<insertion_sort_fn, Itr, Sentinel, Relation, Projection> and
+        ranges::forward_iterator<std::remove_cvref_t<Itr>> and
+        ranges::sentinel_for<std::remove_cvref_t<Sentinel>, std::remove_cvref_t<Itr>> and
+        ranges::indirect_strict_weak_order<Relation,
+                                           ranges::projected<Itr, Projection>,
+                                           ranges::projected<Itr, Projection>>)
     static constexpr auto operator()(Itr&& first,
                                      Sentinel&& last,
                                      Relation&& relation = {},
