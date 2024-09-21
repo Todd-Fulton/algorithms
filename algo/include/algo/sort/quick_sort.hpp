@@ -133,9 +133,8 @@ inline constexpr struct quick_sort_fn
                                                     Range,
                                                     Relation,
                                                     Projection,
-                                                    Partition>)
-            -> unifex::
-                tag_invoke_result_t<quick_sort_fn, Range, Relation, Projection, Partition>
+                                                    Partition>) -> unifex::
+            tag_invoke_result_t<quick_sort_fn, Range, Relation, Projection, Partition>
     {
         return tag_invoke(quick_sort_fn{},
                           std::forward<Range>(range),
@@ -149,29 +148,25 @@ inline constexpr struct quick_sort_fn
               class Relation,
               class Projection,
               class Partition>
-    requires unifex::tag_invocable<quick_sort_fn,
-                                   Itr,
-                                   Sentinel,
-                                   Relation,
-                                   Projection,
-                                   Partition>
-    static constexpr auto operator()(Itr&& first,
-                                     Sentinel&& last,
-                                     Relation&& relation,
-                                     Projection&& projection,
-                                     Partition&& partition)
-        noexcept(unifex::is_nothrow_tag_invocable_v<quick_sort_fn,
-                                                    Itr,
-                                                    Sentinel,
-                                                    Relation,
-                                                    Projection,
-                                                    Partition>)
-            -> unifex::tag_invoke_result_t<quick_sort_fn,
-                                           Itr,
-                                           Sentinel,
-                                           Relation,
-                                           Projection,
-                                           Partition>
+    requires unifex::
+        tag_invocable<quick_sort_fn, Itr, Sentinel, Relation, Projection, Partition>
+        static constexpr auto operator()(Itr&& first,
+                                         Sentinel&& last,
+                                         Relation&& relation,
+                                         Projection&& projection,
+                                         Partition&& partition)
+            noexcept(unifex::is_nothrow_tag_invocable_v<quick_sort_fn,
+                                                        Itr,
+                                                        Sentinel,
+                                                        Relation,
+                                                        Projection,
+                                                        Partition>)
+                -> unifex::tag_invoke_result_t<quick_sort_fn,
+                                               Itr,
+                                               Sentinel,
+                                               Relation,
+                                               Projection,
+                                               Partition>
     {
         return tag_invoke(quick_sort_fn{},
                           std::forward<Itr>(first),
@@ -246,18 +241,18 @@ inline constexpr struct quick_sort_fn
               class Relation = unifex::tag_t<ordering::ascending>,
               class Projection = ranges::identity,
               class Partition = unifex::tag_t<hoare_partition>>
-    requires(not unifex::tag_invocable<quick_sort_fn,
-                                       Itr,
-                                       Sentinel,
-                                       Relation,
-                                       Projection,
-                                       Partition> and
-             ranges::random_access_iterator<std::remove_cvref_t<Itr>> and
-             ranges::sentinel_for<std::remove_cvref_t<Sentinel>,
-                                  std::remove_cvref_t<Itr>> and
-             ranges::indirect_strict_weak_order<Relation,
-                                                ranges::projected<Itr, Projection>,
-                                                ranges::projected<Itr, Projection>>)
+    requires(
+        not unifex::tag_invocable<quick_sort_fn,
+                                  Itr,
+                                  Sentinel,
+                                  Relation,
+                                  Projection,
+                                  Partition> and
+        ranges::random_access_iterator<std::remove_cvref_t<Itr>> and
+        ranges::sentinel_for<std::remove_cvref_t<Sentinel>, std::remove_cvref_t<Itr>> and
+        ranges::indirect_strict_weak_order<Relation,
+                                           ranges::projected<Itr, Projection>,
+                                           ranges::projected<Itr, Projection>>)
     static constexpr auto operator()(Itr&& first,
                                      Sentinel&& last,
                                      Relation&& relation = {},
