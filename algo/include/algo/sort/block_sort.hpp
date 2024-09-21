@@ -429,7 +429,7 @@ struct InternalBuffers
                                        auto&& relation,
                                        auto&& projection)
         : block_size{difference_type(std::sqrt(iterator.length()))}
-        , buffer_size{difference_type(iterator.length()) / block_size + 1}
+        , buffer_size{(difference_type(iterator.length()) / block_size) + 1}
         , find{buffer_size + buffer_size}
         , buffer1{range}
         , buffer2{range}
@@ -888,6 +888,7 @@ constexpr auto make_cache(auto range_size,
                     cache.resize(cache_size);
                 }
                 catch (std::bad_alloc&) {
+                    cache_size = 0;
                 }
             }
         }
@@ -1515,7 +1516,7 @@ struct _adapter final
 };
 
 template <class Relation, class Projection>
-using adapter = _adapter<Relation, Projection>::type;
+using adapter = _adapter<std::decay_t<Relation>, std::decay_t<Projection>>::type;
 
 } // namespace _block_sort
 
