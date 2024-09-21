@@ -104,7 +104,7 @@ struct _adapter
 };
 
 template <class Ordering, class Projection>
-using adapter = _adapter<Ordering, Projection>::type;
+using adapter = _adapter<std::decay_t<Ordering>, std::decay_t<Projection>>::type;
 
 } // namespace _merge_sort
 
