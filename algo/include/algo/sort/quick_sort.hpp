@@ -100,7 +100,9 @@ struct _adapter final
 };
 
 template <class Relation, class Projection, class Partition>
-using adapter = _adapter<Relation, Projection, Partition>::type;
+using adapter = _adapter<std::decay_t<Relation>,
+                         std::decay_t<Projection>,
+                         std::decay_t<Partition>>::type;
 
 } // namespace _quick_sort
 
