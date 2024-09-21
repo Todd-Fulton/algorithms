@@ -17,6 +17,8 @@
 
 #pragma once
 
+#include <algo/traits.hpp>
+
 #include <compare>
 #include <concepts>
 #include <optional>
@@ -51,16 +53,6 @@ struct end_fn;
 
 template <class Seq>
 struct sequence_traits;
-
-template <class T>
-using lvalue_t = std::add_lvalue_reference_t<std::remove_reference_t<T>>;
-
-template <class T>
-using rvalue_t = std::add_rvalue_reference_t<std::remove_reference_t<T>>;
-
-template <class T>
-using const_lvalue_t =
-    std::add_lvalue_reference_t<std::add_const_t<std::remove_reference_t<T>>>;
 
 /**
  * @brief The cursor type associated with the sequence type `Seq`

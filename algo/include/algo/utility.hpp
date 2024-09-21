@@ -17,10 +17,10 @@
 
 #pragma once
 
+
 #include <unifex/tag_invoke.hpp>
 
 #include <algorithm>
-#include <array>
 #include <concepts>
 #include <memory>
 
