@@ -20,6 +20,8 @@
 
 #include <algorithm>
 #include <ranges>
+#include <array>
+
 namespace algo
 {
 
