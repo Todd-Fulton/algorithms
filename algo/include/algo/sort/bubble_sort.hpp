@@ -61,7 +61,7 @@ struct _adapter final
 };
 
 template <class Relation, class Projection>
-using adapter = _adapter<Relation, Projection>::type;
+using adapter = _adapter<std::decay_t<Relation>, std::decay_t<Projection>>::type;
 
 } // namespace _bubble_sort
 

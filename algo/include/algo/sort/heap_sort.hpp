@@ -27,8 +27,6 @@
 
 #include <unifex/tag_invoke.hpp>
 
-#include <iterator>
-
 namespace algo
 {
 
@@ -43,12 +41,12 @@ constexpr auto i_parent(auto x) noexcept
 
 constexpr auto i_left_child(auto x) noexcept
 {
-    return 2 * x + 1;
+    return (2 * x) + 1;
 }
 
 constexpr auto i_right_child(auto x) noexcept
 {
-    return 2 * x + 2;
+    return (2 * x) + 2;
 }
 
 constexpr auto leaf_search(
@@ -140,7 +138,7 @@ struct _adapter
 };
 
 template <class Relation, class Projection>
-using adapter = _adapter<Relation, Projection>::type;
+using adapter = _adapter<std::decay_t<Relation>, std::decay_t<Projection>>::type;
 
 } // namespace _heap_sort
 

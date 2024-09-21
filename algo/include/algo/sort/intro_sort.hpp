@@ -78,8 +78,8 @@ struct Algorithm
 
     template <class Range>
     requires ranges::random_access_range<Range> and ranges::sized_range<Range>
-    constexpr auto operator()(this auto&& self,
-                              Range&& range) -> sorted<Range, Relation, Projection>
+    constexpr auto operator()(this auto&& self, Range&& range)
+        -> sorted<Range, Relation, Projection>
     // TODO: noexcept
     {
         // Get the size of the range and calculate the depth limit for recursion.
@@ -116,7 +116,10 @@ struct _adapter
 };
 
 template <class Relation, class Projection, class PartitionTag, class SortTag>
-using adapter = _adapter<Relation, Projection, PartitionTag, SortTag>::type;
+using adapter = _adapter<std::decay_t<Relation>,
+                         std::decay_t<Projection>,
+                         std::decay_t<PartitionTag>,
+                         std::decay_t<SortTag>>::type;
 
 } // namespace _intro_sort
 
@@ -151,29 +154,25 @@ inline constexpr struct intro_sort_fn
               class Projection = ranges::identity,
               class PartitionTag = unifex::tag_t<branchless_lomuto_partition>,
               class SortTag = unifex::tag_t<heap_sort>>
-    requires unifex::tag_invocable<intro_sort_fn,
-                                   Range,
-                                   Relation,
-                                   Projection,
-                                   PartitionTag,
-                                   SortTag>
-    static constexpr auto operator()(Range&& rng,
-                                     Relation&& relation = {},
-                                     Projection&& projection = {},
-                                     PartitionTag&& partition = {},
-                                     SortTag&& subsort = {})
-        noexcept(unifex::is_nothrow_tag_invocable_v<intro_sort_fn,
-                                                    Range,
-                                                    Relation,
-                                                    Projection,
-                                                    PartitionTag,
-                                                    SortTag>)
-            -> unifex::tag_invoke_result_t<intro_sort_fn,
-                                           Range,
-                                           Relation,
-                                           Projection,
-                                           PartitionTag,
-                                           SortTag>
+    requires unifex::
+        tag_invocable<intro_sort_fn, Range, Relation, Projection, PartitionTag, SortTag>
+        static constexpr auto operator()(Range&& rng,
+                                         Relation&& relation = {},
+                                         Projection&& projection = {},
+                                         PartitionTag&& partition = {},
+                                         SortTag&& subsort = {})
+            noexcept(unifex::is_nothrow_tag_invocable_v<intro_sort_fn,
+                                                        Range,
+                                                        Relation,
+                                                        Projection,
+                                                        PartitionTag,
+                                                        SortTag>)
+                -> unifex::tag_invoke_result_t<intro_sort_fn,
+                                               Range,
+                                               Relation,
+                                               Projection,
+                                               PartitionTag,
+                                               SortTag>
     {
         return tag_invoke(intro_sort_fn{},
                           std::forward<Range>(rng),
@@ -273,19 +272,19 @@ inline constexpr struct intro_sort_fn
               class PartitionTag = hoare_partition_fn,
               class SortFn = heap_sort_fn>
     // TODO: reduce restriction on random_access_range if able
-    requires(not unifex::tag_invocable<intro_sort_fn,
-                                       Itr,
-                                       Sentinel,
-                                       Relation,
-                                       Projection,
-                                       PartitionTag,
-                                       SortFn> and
-             ranges::random_access_iterator<std::remove_cvref_t<Itr>> and
-             ranges::sentinel_for<std::remove_cvref_t<Sentinel>,
-                                  std::remove_cvref_t<Itr>> and
-             ranges::indirect_strict_weak_order<Relation,
-                                                ranges::projected<Itr, Projection>,
-                                                ranges::projected<Itr, Projection>>)
+    requires(
+        not unifex::tag_invocable<intro_sort_fn,
+                                  Itr,
+                                  Sentinel,
+                                  Relation,
+                                  Projection,
+                                  PartitionTag,
+                                  SortFn> and
+        ranges::random_access_iterator<std::remove_cvref_t<Itr>> and
+        ranges::sentinel_for<std::remove_cvref_t<Sentinel>, std::remove_cvref_t<Itr>> and
+        ranges::indirect_strict_weak_order<Relation,
+                                           ranges::projected<Itr, Projection>,
+                                           ranges::projected<Itr, Projection>>)
     static constexpr auto operator()(Itr&& first,
                                      Sentinel&& last,
                                      Relation&& relation = {},
