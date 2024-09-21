@@ -12,25 +12,18 @@ Hover:
     ShowAKA: True
 ---
 If:
-    PathMatch: .*\.hpp
+    PathMatch: [.*\.hpp, .*\.cpp]
 CompileFlags:
-    Remove: [-std=*]
+    Remove: [-std=*,
+             -W*,
+             -f*,
+             -mtune=*,
+             -march=*,
+             -D_GNU_SOURCE,
+             -D_LIBCPP_HARDENING*]
     Add: [-std=c++26,
           -Wall,
-          -Wextra,
-          -Wshadow,
-          -Wnon-virtual-dtor,
-          -Wold-style-cast,
-          -Wcast-align,
-          -Wunused,
-          -Woverloaded-virtual,
-          -Wpedantic,
-          -Wconversion,
-          -Wsign-conversion,
-          -Wnull-dereference,
-          -Wdouble-promotion,
-          -Wformat=2,
-          -Wimplicit-fallthrough]
+          -freflection-latest]
 
 # Diagnostics:
 #     ClangTidy:
