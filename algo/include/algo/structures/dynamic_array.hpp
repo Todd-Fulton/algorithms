@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cassert>
 #include <exception>
+#include <iterator>
 #include <memory>
 
 #include <algo/container.hpp>
@@ -86,11 +87,11 @@ public:
     constexpr ~dynamic_array()
     {
         using AllocT = std::allocator_traits<allocator_type>;
-        for (auto itr = this->begin_; itr != this->end_; ++itr) {
+        for (auto itr = this->begin_; itr != this->end_; std::advance(itr)) {
             AllocT::destroy(alloc_, itr);
         }
         AllocT::deallocate(alloc_, begin_, usize(*this));
-        begin_ = end_ = nullptr;
+        begin_ = end_ = cap_end_ = nullptr;
     }
 
 private:
