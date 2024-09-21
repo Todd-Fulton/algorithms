@@ -27,8 +27,6 @@
 #include <list>
 #include <vector>
 
-
-
 using ranges::shuffle;
 using std::greater;
 using std::list;
@@ -111,7 +109,7 @@ TEST(Sorting, BubbleSort_Descending_List)
 TEST(Sorting, HeapSort_Ascending_Vector)
 {
     vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
+    ranges::iota(expected, 0);
     vector<int> given{expected};
 
     mt19937 gen{seed}; // NOLINT
@@ -126,7 +124,7 @@ TEST(Sorting, HeapSort_Ascending_Vector)
 TEST(Sorting, HeapSort_Descending_Vector)
 {
     vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
+    ranges::iota(expected, 0);
     std::ranges::reverse(expected);
     vector<int> given{expected};
 
@@ -199,7 +197,7 @@ TEST(Sorting, QuickSort_Descending_Vector_Branchless_Lomuto_Scheme)
 TEST(Sorting, ShellSort_Ascending_Vector)
 {
     vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
+    ranges::iota(expected, 0);
     vector<int> given{expected};
 
     mt19937 gen{seed}; // NOLINT
@@ -214,7 +212,7 @@ TEST(Sorting, ShellSort_Ascending_Vector)
 TEST(Sorting, ShellSort_Descending_Vector)
 {
     vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
+    ranges::iota(expected, 0);
     std::ranges::reverse(expected);
     vector<int> given{expected};
 
@@ -230,7 +228,7 @@ TEST(Sorting, ShellSort_Descending_Vector)
 TEST(Sorting, SelectionSort_Ascending_Vector)
 {
     vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
+    ranges::iota(expected, 0);
     vector<int> given{expected};
 
     mt19937 gen{seed}; // NOLINT
@@ -261,7 +259,7 @@ TEST(Sorting, SelectionSort_Ascending_List)
 TEST(Sorting, SelectionSort_Descending_Vector)
 {
     vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
+    ranges::iota(expected, 0);
     std::ranges::reverse(expected);
     vector<int> given{expected};
 
@@ -293,7 +291,7 @@ TEST(Sorting, SelectionSort_Descending_List)
 TEST(Sorting, TimSort_Ascending_Vector)
 {
     vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
+    ranges::iota(expected, 0);
     vector<int> given{expected};
 
     mt19937 gen{seed}; // NOLINT
@@ -308,7 +306,7 @@ TEST(Sorting, TimSort_Ascending_Vector)
 TEST(Sorting, TimSort_Descending_Vector)
 {
     vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
+    ranges::iota(expected, 0);
     std::ranges::reverse(expected);
     vector<int> given{expected};
 
@@ -324,7 +322,7 @@ TEST(Sorting, TimSort_Descending_Vector)
 TEST(Sorting, TreeSort_Ascending_Vector)
 {
     vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
+    ranges::iota(expected, 0);
     vector<int> given{expected};
 
     mt19937 gen{seed}; // NOLINT
@@ -339,7 +337,7 @@ TEST(Sorting, TreeSort_Ascending_Vector)
 TEST(Sorting, TreeSort_Descending_Vector)
 {
     vector<int> expected(range_size);
-    std::iota(std::begin(expected), std::end(expected), 0);
+    ranges::iota(expected, 0);
     std::ranges::reverse(expected);
     vector<int> given{expected};
 
@@ -403,7 +401,7 @@ TEST(Sorting, BlockSort_Descending_NoCache_Vector)
 TEST(Sorting, BlockSort_Ascending_SmallCache_Vector)
 {
     EXPECT_TRUE(
-        ranges::is_sorted(rand_range<>() | algo::block_sort_ascending(range_size / 4 + 1),
+        ranges::is_sorted(rand_range<>() | algo::block_sort_ascending((range_size / 4) + 1),
                           algo::ordering::ascending));
 }
 
@@ -411,6 +409,6 @@ TEST(Sorting, BlockSort_Descending_SmallCache_Vector)
 {
 
     EXPECT_TRUE(ranges::is_sorted(rand_range<>() |
-                                      algo::block_sort_descending(range_size / 4 + 1),
+                                      algo::block_sort_descending((range_size / 4) + 1),
                                   algo::ordering::descending));
 }
