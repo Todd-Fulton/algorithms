@@ -240,8 +240,8 @@ constexpr inline struct to_iterator_fn
     template <std::ranges::range Rng, class Cur>
     requires(not std::is_rvalue_reference_v<Rng> and
              unifex::tag_invocable<to_iterator_fn, Rng, Cur>)
-    static constexpr auto operator()(Rng&& rng,
-                                     Cur&& cur) noexcept -> std::ranges::iterator_t<Rng>
+    static constexpr auto operator()(Rng&& rng, Cur&& cur) noexcept
+        -> std::ranges::iterator_t<Rng>
     {
         return unifex::tag_invoke(
             to_iterator_fn{}, std::forward<Rng>(rng), std::forward<Cur>(cur));
@@ -251,10 +251,10 @@ constexpr inline struct to_iterator_fn
 constexpr inline struct from_iterator_fn
 {
     template <std::ranges::range Rng, class Itr>
-    requires(not std::is_rvalue_reference_v<Rng> and
-             unifex::
-                 tag_invocable<from_iterator_fn, Rng, std::ranges::iterator_t<Rng>> and
-             std::same_as<std::remove_cvref_t<Itr>, std::ranges::iterator_t<Rng>>)
+    requires(
+        not std::is_rvalue_reference_v<Rng> and
+        unifex::tag_invocable<from_iterator_fn, Rng, std::ranges::iterator_t<Rng>> and
+        std::same_as<std::remove_cvref_t<Itr>, std::ranges::iterator_t<Rng>>)
     static constexpr auto operator()(Rng&& rng, Itr&& itr) noexcept -> cursor_t<Rng>
     {
         return unifex::tag_invoke(
@@ -265,16 +265,16 @@ constexpr inline struct from_iterator_fn
 constexpr inline struct distance_fn
 {
     template <class Seq>
-    requires(unifex::tag_invocable<distance_fn,
-                                   Seq const&,
-                                   const_lvalue_t<cursor_t<Seq>>,
-                                   const_lvalue_t<cursor_t<Seq>>> and
-             std::is_convertible_v<
-                 unifex::tag_invoke_result_t<distance_fn,
-                                             Seq const&,
-                                             const_lvalue_t<cursor_t<Seq>>,
-                                             const_lvalue_t<cursor_t<Seq>>>,
-                 distance_t>)
+    requires(
+        unifex::tag_invocable<distance_fn,
+                              Seq const&,
+                              const_lvalue_t<cursor_t<Seq>>,
+                              const_lvalue_t<cursor_t<Seq>>> and
+        std::is_convertible_v<unifex::tag_invoke_result_t<distance_fn,
+                                                          Seq const&,
+                                                          const_lvalue_t<cursor_t<Seq>>,
+                                                          const_lvalue_t<cursor_t<Seq>>>,
+                              distance_t>)
     static constexpr auto operator()(Seq const& seq,
                                      const_lvalue_t<cursor_t<Seq>> from,
                                      const_lvalue_t<cursor_t<Seq>> to)
@@ -304,11 +304,11 @@ constexpr inline struct is_empty_fn
 constexpr inline struct is_last_fn
 {
     template <class Seq>
-    requires(unifex::tag_invocable<is_last_fn, Seq> and
-             std::is_convertible_v<
-                 unifex::
-                     tag_invoke_result_t<is_last_fn, Seq, const_lvalue_t<cursor_t<Seq>>>,
-                 bool>)
+    requires(
+        unifex::tag_invocable<is_last_fn, Seq> and
+        std::is_convertible_v<
+            unifex::tag_invoke_result_t<is_last_fn, Seq, const_lvalue_t<cursor_t<Seq>>>,
+            bool>)
     static constexpr auto operator()(const_lvalue_t<Seq> rng,
                                      const_lvalue_t<cursor_t<Seq>> cur)
         noexcept(unifex::is_nothrow_tag_invocable_v<is_last_fn,
@@ -322,9 +322,15 @@ constexpr inline struct is_last_fn
 
 constexpr inline struct size_fn
 {
+    /**
+     * @brief Get the size of a sequence
+     *
+     * @tparam Seq Any type providing `tag_invoke(size_fn{}, self)`
+     * @param seq
+     * @return the size of seq
+     */
     template <class Seq>
-    requires(not std::is_rvalue_reference_v<Seq> and
-             unifex::tag_invocable<size_fn, Seq> and
+    requires(unifex::tag_invocable<size_fn, Seq> and
              std::convertible_to<unifex::tag_invoke_result_t<size_fn, Seq>, distance_t>)
     static constexpr auto operator()(Seq&& seq)
         noexcept(unifex::is_nothrow_tag_invocable_v<size_fn, Seq>) -> distance_t
@@ -673,9 +679,9 @@ inline constexpr struct move_at_fn
 inline constexpr struct read_at_unchecked_fn
 {
     template <class Seq>
-    requires(not std::is_rvalue_reference_v<Seq> and
-             unifex::
-                 tag_invocable<read_at_unchecked_fn, Seq, const_lvalue_t<cursor_t<Seq>>>)
+    requires(
+        not std::is_rvalue_reference_v<Seq> and
+        unifex::tag_invocable<read_at_unchecked_fn, Seq, const_lvalue_t<cursor_t<Seq>>>)
     static constexpr auto operator()(Seq&& seq, const_lvalue_t<cursor_t<Seq>> cur)
         noexcept(unifex::is_nothrow_tag_invocable_v<read_at_unchecked_fn,
                                                     Seq,
@@ -703,9 +709,9 @@ inline constexpr struct read_at_unchecked_fn
 inline constexpr struct move_at_unchecked_fn
 {
     template <class Seq>
-    requires(not std::is_rvalue_reference_v<Seq> and
-             unifex::
-                 tag_invocable<move_at_unchecked_fn, Seq, const_lvalue_t<cursor_t<Seq>>>)
+    requires(
+        not std::is_rvalue_reference_v<Seq> and
+        unifex::tag_invocable<move_at_unchecked_fn, Seq, const_lvalue_t<cursor_t<Seq>>>)
     static constexpr auto operator()(Seq&& seq, const_lvalue_t<cursor_t<Seq>> cur)
         noexcept(unifex::is_nothrow_tag_invocable_v<move_at_unchecked_fn,
                                                     Seq,
