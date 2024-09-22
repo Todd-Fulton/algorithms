@@ -178,6 +178,136 @@ public:
         return *this;
     }
 
+private:
+    constexpr void destroy() noexcept
+    {
+        using AllocT = std::allocator_traits<allocator_type>;
+        if (begin_ != nullptr) {
+            for (auto itr = begin_; itr != std::as_const(end_); std::advance(itr, 1)) {
+                std::destroy_at(itr);
+            }
+            AllocT::deallocate(alloc_, begin_, algo::capacity(*this));
+            begin_ = end_ = cap_end_ = nullptr;
+        }
+    }
+
+    constexpr void take_own(dynamic_array& other) noexcept
+    {
+        begin_ = other.begin_;
+        end_ = other.end_;
+        cap_end_ = other.cap_end_;
+        other.begin_ = other.end_ = other.cap_end_ = nullptr;
+    }
+
+    /// assumes buff has capacity to hold inpsz
+    constexpr value_type* move_to(value_type* const buff,
+                                  std::ptrdiff_t bufsz,
+                                  value_type* const input,
+                                  std::ptrdiff_t inpsz)
+        noexcept(std::is_nothrow_move_assignable_v<value_type>)
+    {
+        auto const cnt = std::min(bufsz, inpsz);
+        auto e = std::next(input, cnt);
+        if constexpr (std::is_nothrow_copy_assignable_v<value_type>) {
+            std::ranges::move(input, e, buff);
+        }
+        else {
+            auto itr = buff;
+            try {
+                std::ranges::move(input, e, std::ref(itr));
+            }
+            catch (...) {
+                for (auto i = buff; i < std::as_const(itr); std::advance(itr, 1)) {
+                    std::destroy_at(i);
+                }
+                throw;
+            }
+        }
+        // uninitialized_move will handle exceptions, we can let an exception go to the
+        // caller.
+        auto new_end_ = std::uninitialized_move(e,
+                                                // if inpsz was smaller (cnt = inpsz) then
+                                                // move 0, otherwise buffer was smaller
+                                                // (cnt = bufsz) then inpsz - cnt is >= 0
+                                                e + (inpsz - cnt),
+                                                std::next(begin_, cnt));
+        // If bufsz was greater than inpsz, then we will destroy remaining in buff
+        for (auto itr = new_end_; itr < std::next(begin_, inpsz); std::advance(itr, 1)) {
+            std::destroy_at(itr);
+        }
+        return new_end_;
+    }
+
+public:
+    constexpr dynamic_array& operator=(dynamic_array&& other)
+        noexcept(std::is_nothrow_move_assignable_v<value_type>)
+    requires(not std::allocator_traits<
+             allocator_type>::propagate_on_container_move_assignment::value)
+    {
+        using AllocT = std::allocator_traits<allocator_type>;
+        if constexpr (AllocT::is_always_equal) {
+            // can take own
+            destroy();
+            take_own(other);
+        }
+        else {
+            if (alloc_ == other.alloc_) {
+                // can take own
+                destroy();
+                take_own(other);
+            }
+            else {
+                // can not take own
+                // if we have capacity, move elements from other.
+                if (algo::capacity(*this) >= algo::size(other)) {
+                    end_ = move_to(begin_,
+                                   std::ptrdiff_t(algo::size(*this)),
+                                   other.begin_,
+                                   std::ptrdiff_t(algo::size(other)));
+                }
+                else {
+                    // We need to allocate more space using this->alloc_
+                    auto const other_size = algo::size(other);
+                    auto new_buff_ = AllocT::allocate(alloc_, other_size);
+                    auto new_end_{nullptr};
+                    if constexpr (not std::is_nothrow_move_assignable_v<value_type>) {
+                        try {
+                            new_end_ =
+                                move_to(new_buff_, other_size, other.begin_, other_size);
+                        }
+                        catch (...) {
+                            AllocT::deallocate(alloc_, new_buff_, other_size);
+                        }
+                    }
+                    else {
+                        new_end_ =
+                            move_to(new_buff_, other_size, other.begin_, other_size);
+                    }
+                    for (auto itr = begin_; itr < end_; std::advance(itr, 1)) {
+                        std::destroy_at(itr);
+                    }
+                    AllocT::deallocate(alloc_, begin_, algo::capacity(*this));
+                    begin_ = new_buff_;
+                    end_ = new_end_;
+                    cap_end_ = new_end_;
+                }
+            }
+        }
+        return *this;
+    }
+
+    constexpr dynamic_array& operator=(dynamic_array&& other) noexcept
+    requires(std::allocator_traits<
+             allocator_type>::propagate_on_container_move_assignment::value)
+    {
+        if (this != &other) {
+            destroy();
+            take_own();
+            alloc_ = other.alloc_;
+        }
+        return *this;
+    }
+
     constexpr ~dynamic_array()
     {
         using AllocT = std::allocator_traits<allocator_type>;
@@ -209,7 +339,7 @@ private:
         noexcept(std::is_nothrow_swappable_v<value_type*> and
                  std::is_nothrow_swappable_v<distance_t> and
                  std::is_nothrow_swappable_v<allocator_type>)
-    requires(std::is_nothrow_swappable_v<allocator_type>)
+    requires(std::is_swappable_v<allocator_type>)
     {
         algo::swap(left.begin_, right.begin_);
         algo::swap(left.end_, right.end_);
