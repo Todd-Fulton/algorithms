@@ -59,3 +59,26 @@ TEST(Structures, dynamic_array_insert_n)
         inc(arr, cur);
     }
 }
+
+TEST(Structures, dynamic_array_move_assign_simple)
+{
+    dynamic_array<int> arr;
+    auto r = rand_range();
+
+    reserve(arr, r.size());
+
+    auto cur = first(arr);
+    for (auto i : r) {
+        insert(arr, cur, i);
+        inc(arr, cur);
+    }
+
+    dynamic_array barr = std::move(arr);
+
+    cur = first(barr);
+    for (auto i : r) {
+        EXPECT_EQ(read_at(barr, cur), i);
+        inc(barr, cur);
+    }
+    EXPECT_EQ(algo::size(arr), 0ul);
+}
