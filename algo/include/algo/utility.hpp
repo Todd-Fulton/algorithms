@@ -17,7 +17,6 @@
 
 #pragma once
 
-
 #include <unifex/tag_invoke.hpp>
 
 #include <algorithm>
@@ -142,9 +141,9 @@ constexpr inline struct swap_fn
 
     template <class A, class B>
     requires(not unifex::tag_invocable<swap_fn, A&, B&> and
-             std::is_swappable_with_v<A, B>)
+             std::is_swappable_with_v<A&, B&>)
     static constexpr void operator()(A& left, B& right)
-        noexcept(std::is_nothrow_swappable_with_v<A, B>)
+        noexcept(std::is_nothrow_swappable_with_v<A&, B&>)
     {
         using std::swap;
         swap(left, right);
